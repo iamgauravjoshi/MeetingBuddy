@@ -431,15 +431,27 @@ export function listStateVersions(pid: string): StateVersion[] {
   }))
 }
 
-/** Recent meeting reports for a project, used as "previous meeting history" context for the LLM. */
-export function recentMeetingSummaries(pid: string, excludeMeetingId: string, limit = 5): { title: string; date: string; summary: string }[] {
-  const rows = db
+/**
+ * What the most recent earlier meetings actually changed in the project state, newest meeting first.
+ * Used as "previous meeting history" for the LLM. Only applied changes count: a report's own summary may describe
+ * proposals that were rejected. Meetings at or after `meetingId` are left out, so re-analyzing an old meeting
+ * doesn't see the future.
+ */
+export function recentMeetingChanges(pid: string, meetingId: string, limit = 5): { title: string; date: string; changes: StateVersion['changes'] }[] {
+  const meetings = db
     .prepare(
-      `SELECT m.title, m.started_at, r.summary FROM meetings m JOIN reports r ON r.meeting_id = m.id
-       WHERE m.project_id = ? AND m.id != ? ORDER BY m.started_at DESC LIMIT ?`
+      `SELECT m.id, m.title, m.started_at FROM meetings m
+       WHERE m.project_id = ? AND m.started_at < (SELECT started_at FROM meetings WHERE id = ?)
+         AND EXISTS (SELECT 1 FROM state_versions v WHERE v.meeting_id = m.id)
+       ORDER BY m.started_at DESC LIMIT ?`
     )
-    .all(pid, excludeMeetingId, limit) as Row[]
-  return rows.map((r) => ({ title: r.title, date: r.started_at, summary: r.summary }))
+    .all(pid, meetingId, limit) as Row[]
+  const versions = db.prepare('SELECT changes FROM state_versions WHERE meeting_id = ? ORDER BY created_at, rowid')
+  return meetings.map((m) => ({
+    title: m.title,
+    date: m.started_at,
+    changes: (versions.all(m.id) as Row[]).flatMap((v) => JSON.parse(v.changes) as StateVersion['changes'])
+  }))
 }
 
 export function deleteSegments(mid: string, sources: Segment['source'][]): void {

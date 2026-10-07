@@ -1,13 +1,6 @@
 // Types shared by the main process, preload and renderer.
 
-export const ITEM_TYPES = [
-  'requirement',
-  'decision',
-  'task',
-  'risk',
-  'deadline',
-  'question'
-] as const
+export const ITEM_TYPES = ['requirement', 'decision', 'task', 'risk', 'deadline', 'question'] as const
 export type ItemType = (typeof ITEM_TYPES)[number]
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {

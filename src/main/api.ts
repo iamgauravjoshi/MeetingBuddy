@@ -61,7 +61,9 @@ async function transcribeRecordings(s: Settings, meetingId: string): Promise<str
     const r = results[i]
     if (r.status === 'rejected') errors.push(`${src === 'mic' ? 'Microphone' : 'system'} audio: ${errText(r.reason)}`)
     if (r.status === 'fulfilled' && r.value.length) return r.value
-    return preview.filter((g) => g.source === src).map(({ speaker, tStart, tEnd, text, source }) => ({ speaker, tStart, tEnd, text, source }))
+    return preview
+      .filter((g) => g.source === src)
+      .map(({ speaker, tStart, tEnd, text, source }) => ({ speaker, tStart, tEnd, text, source }))
   })
   db.replaceSegments(meetingId, [...STREAMS], mergeStreams(mic, sys))
   return errors
@@ -197,10 +199,20 @@ export const api = {
     // check the size before reading: a long video would otherwise be loaded into memory only to be refused
     checkUploadSize(s.sttProvider, statSync(p).size)
     const ext = p.split('.').pop()!.toLowerCase()
-    const mime = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', webm: 'audio/webm', ogg: 'audio/ogg', mp4: 'video/mp4' }[ext] ?? 'application/octet-stream'
+    const mime =
+      { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', webm: 'audio/webm', ogg: 'audio/ogg', mp4: 'video/mp4' }[ext] ??
+      'application/octet-stream'
     const segs = await transcribe(s, readFileSync(p), mime, 'system', 0, FILE_TIMEOUT_MS)
     if (segs.length === 0) throw new Error('No speech was found in that file.')
-    const m = db.createMeeting(projectId, p.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, ''), 'ready', 'import')
+    const m = db.createMeeting(
+      projectId,
+      p
+        .split(/[\\/]/)
+        .pop()!
+        .replace(/\.[^.]+$/, ''),
+      'ready',
+      'import'
+    )
     db.addSegments(m.id, segs)
     return m.id
   },
@@ -234,7 +246,8 @@ export const api = {
   transcribeRecording: (meetingId: string) => {
     if (getSettings().sttProvider === 'none') throw new Error('Choose a speech-to-text provider in Settings first.')
     const status = db.getMeeting(meetingId)?.status
-    if (status === 'applied') throw new Error("This meeting's changes were already applied to the project, so it can't be transcribed again.")
+    if (status === 'applied')
+      throw new Error("This meeting's changes were already applied to the project, so it can't be transcribed again.")
     if (status === 'analyzing') throw new Error('An analysis is running for this meeting. Try again after it finishes.')
     db.updateMeeting(meetingId, { status: 'transcribing', error: null })
     void finishMeeting(meetingId)
@@ -251,7 +264,8 @@ export const api = {
   updateProposal: (id: string, patch: Partial<Pick<Proposal, 'status' | 'title' | 'body' | 'owner' | 'dueDate' | 'itemType'>>) => {
     // only applyApproved marks proposals applied, and what was applied stays as it was
     if (patch.status === 'applied') throw new Error('Proposals are marked applied only by applying them.')
-    if (db.getProposal(id)?.status === 'applied') throw new Error('This change was already applied to the project and can no longer be edited.')
+    if (db.getProposal(id)?.status === 'applied')
+      throw new Error('This change was already applied to the project and can no longer be edited.')
     db.updateProposal(id, patch)
   },
   applyApproved: (meetingId: string) => applyApproved(meetingId)

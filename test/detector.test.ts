@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { MeetingDetector, parseMicUsers } from '../src/main/detector'
 
-const KEY = 'HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone\\NonPackaged'
+const KEY =
+  'HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone\\NonPackaged'
 const ZOOM = `${KEY}\\C:#Users#me#AppData#Roaming#Zoom#bin#Zoom.exe`
 const TEAMS = `${KEY}\\C:#Program Files#WindowsApps#MSTeams#ms-teams.exe`
 

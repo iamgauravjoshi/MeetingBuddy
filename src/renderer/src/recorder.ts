@@ -57,7 +57,10 @@ export class MeetingRecorder {
     if (!mic && !system) throw new Error('No audio source could be captured.')
 
     this.startedAt = Date.now()
-    for (const [source, stream] of [['mic', mic], ['system', system]] as const) {
+    for (const [source, stream] of [
+      ['mic', mic],
+      ['system', system]
+    ] as const) {
       if (!stream) continue
       const full = new MediaRecorder(stream, { mimeType: MIME, audioBitsPerSecond: BITRATE })
       const t: Track = { source, stream, full, writes: Promise.resolve(), chunkRec: null, chunkStart: 0 }

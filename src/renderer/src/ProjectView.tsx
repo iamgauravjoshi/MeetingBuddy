@@ -44,11 +44,19 @@ export function ProjectView(props: {
       <div className="header">
         <div>
           <h1>{project.name}</h1>
-          {project.description && <div className="muted small" style={{ maxWidth: 800, whiteSpace: 'pre-wrap' }}>{project.description}</div>}
+          {project.description && (
+            <div className="muted small" style={{ maxWidth: 800, whiteSpace: 'pre-wrap' }}>
+              {project.description}
+            </div>
+          )}
         </div>
         <span className="spacer" />
-        <button className="btn" onClick={() => setEditing(true)}>Edit project</button>
-        <button className="btn rec" onClick={props.onRecord}>● Record meeting</button>
+        <button className="btn" onClick={() => setEditing(true)}>
+          Edit project
+        </button>
+        <button className="btn rec" onClick={props.onRecord}>
+          ● Record meeting
+        </button>
       </div>
       <div className="tabs">
         {[
@@ -57,7 +65,9 @@ export function ProjectView(props: {
           ['stakeholders', 'Stakeholders'],
           ['history', 'Change history']
         ].map(([k, label]) => (
-          <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{label}</button>
+          <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>
+            {label}
+          </button>
         ))}
       </div>
       {tab === 'board' && <Board projectId={project.id} />}
@@ -105,7 +115,9 @@ function EditProjectModal(props: { project: Project; onClose: () => void; onSave
             Delete project
           </button>
           <span className="grow" />
-          <button className="btn" onClick={props.onClose}>Cancel</button>
+          <button className="btn" onClick={props.onClose}>
+            Cancel
+          </button>
           <button
             className="btn primary"
             disabled={busy}
@@ -121,8 +133,12 @@ function EditProjectModal(props: { project: Project; onClose: () => void; onSave
         </>
       }
     >
-      <Field label="Name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label="Description, goals and context"><textarea className="input" rows={6} value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>
+      <Field label="Name">
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="Description, goals and context">
+        <textarea className="input" rows={6} value={desc} onChange={(e) => setDesc(e.target.value)} />
+      </Field>
       <ErrorBox error={error} />
     </Modal>
   )
@@ -156,8 +172,12 @@ function Board({ projectId }: { projectId: string }) {
           return (
             <div key={t} className="column">
               <div className="column-head">
-                <h3>{ITEM_TYPE_LABELS[t]} <span className="muted small">{list.length}</span></h3>
-                <button className="btn ghost sm" onClick={() => setEdit({ type: t, projectId })}>+ Add</button>
+                <h3>
+                  {ITEM_TYPE_LABELS[t]} <span className="muted small">{list.length}</span>
+                </h3>
+                <button className="btn ghost sm" onClick={() => setEdit({ type: t, projectId })}>
+                  + Add
+                </button>
               </div>
               {list.map((i) => (
                 <div key={i.id} className={`item-card ${i.status !== 'open' ? 'dim' : ''}`} {...clickable(() => setEdit(i))}>
@@ -208,7 +228,15 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
   const { run, busy, error } = useAction()
 
   const save = async (): Promise<void> => {
-    if (isNew) await api.createItem({ projectId: props.item.projectId!, type: f.type, title: f.title.trim(), body: f.body.trim(), owner: f.owner.trim(), dueDate: f.dueDate })
+    if (isNew)
+      await api.createItem({
+        projectId: props.item.projectId!,
+        type: f.type,
+        title: f.title.trim(),
+        body: f.body.trim(),
+        owner: f.owner.trim(),
+        dueDate: f.dueDate
+      })
     else await api.updateItem(props.item.id!, { ...f, title: f.title.trim(), body: f.body.trim(), owner: f.owner.trim() })
     props.onSaved()
   }
@@ -235,30 +263,52 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
             </button>
           )}
           <span className="grow" />
-          <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" disabled={!f.title.trim() || busy} onClick={() => void run(save)}>Save</button>
+          <button className="btn" onClick={props.onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" disabled={!f.title.trim() || busy} onClick={() => void run(save)}>
+            Save
+          </button>
         </>
       }
     >
       <div className="row">
         <Field label="Type">
           <select className="input" value={f.type} onChange={set('type')}>
-            {ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {ITEM_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </select>
         </Field>
         {!isNew && (
           <Field label="Status">
             <select className="input" value={f.status} onChange={set('status')}>
-              {['open', 'done', 'superseded', 'cancelled'].map((s) => <option key={s}>{s}</option>)}
+              {['open', 'done', 'superseded', 'cancelled'].map((s) => (
+                <option key={s}>{s}</option>
+              ))}
             </select>
           </Field>
         )}
       </div>
-      <Field label="Title"><input className="input" value={f.title} onChange={set('title')} autoFocus /></Field>
-      <Field label="Details"><textarea className="input" rows={4} value={f.body} onChange={set('body')} /></Field>
+      <Field label="Title">
+        <input className="input" value={f.title} onChange={set('title')} autoFocus />
+      </Field>
+      <Field label="Details">
+        <textarea className="input" rows={4} value={f.body} onChange={set('body')} />
+      </Field>
       <div className="row">
-        <div className="grow"><Field label="Owner"><input className="input" value={f.owner} onChange={set('owner')} /></Field></div>
-        <div className="grow"><Field label="Due date"><input className="input" type="date" value={f.dueDate} onChange={set('dueDate')} /></Field></div>
+        <div className="grow">
+          <Field label="Owner">
+            <input className="input" value={f.owner} onChange={set('owner')} />
+          </Field>
+        </div>
+        <div className="grow">
+          <Field label="Due date">
+            <input className="input" type="date" value={f.dueDate} onChange={set('dueDate')} />
+          </Field>
+        </div>
       </div>
       <ErrorBox error={error} />
       {history.length > 0 && (
@@ -266,8 +316,18 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
           <h3>History: who changed this, and when</h3>
           {history.map((h) => (
             <div key={h.id} className="history-entry small">
-              <div><b>{h.summary}</b> <span className="muted">· {fmtDate(h.at)}{h.meetingTitle ? ` · ${h.meetingTitle}` : ''}</span></div>
-              {h.quote && <div className="quote">“{h.quote}” <span className="muted">— {h.speaker}</span></div>}
+              <div>
+                <b>{h.summary}</b>{' '}
+                <span className="muted">
+                  · {fmtDate(h.at)}
+                  {h.meetingTitle ? ` · ${h.meetingTitle}` : ''}
+                </span>
+              </div>
+              {h.quote && (
+                <div className="quote">
+                  “{h.quote}” <span className="muted">— {h.speaker}</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -290,7 +350,9 @@ function Meetings({ projectId, onOpen }: { projectId: string; onOpen: (id: strin
   return (
     <div className="col" style={{ gap: 12 }}>
       <div className="row">
-        <button className="btn" onClick={() => setPaste({ title: `Meeting · ${new Date().toLocaleDateString()}`, text: '' })}>Paste transcript</button>
+        <button className="btn" onClick={() => setPaste({ title: `Meeting · ${new Date().toLocaleDateString()}`, text: '' })}>
+          Paste transcript
+        </button>
         <button
           className="btn"
           disabled={pickFile.busy}
@@ -324,9 +386,16 @@ function Meetings({ projectId, onOpen }: { projectId: string; onOpen: (id: strin
             <div key={m.id} className="list-row" {...clickable(() => onOpen(m.id))}>
               <div className="grow">
                 <div className="item-title">{m.title}</div>
-                <div className="muted small">{fmtDate(m.startedAt)}{m.sourceApp && m.sourceApp !== 'import' ? ` · ${m.sourceApp}` : ''}</div>
+                <div className="muted small">
+                  {fmtDate(m.startedAt)}
+                  {m.sourceApp && m.sourceApp !== 'import' ? ` · ${m.sourceApp}` : ''}
+                </div>
               </div>
-              {m.error && <span className="badge red" title={m.error}>Needs attention</span>}
+              {m.error && (
+                <span className="badge red" title={m.error}>
+                  Needs attention
+                </span>
+              )}
               <span className={`badge ${color}`}>{label}</span>
             </div>
           )
@@ -363,21 +432,31 @@ function PasteTranscriptModal(props: {
       onClose={props.onClose}
       footer={
         <>
-          <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" disabled={!text.trim() || busy} onClick={() => void run(() => props.onImport(title.trim() || 'Meeting', text))}>
+          <button className="btn" onClick={props.onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            disabled={!text.trim() || busy}
+            onClick={() => void run(() => props.onImport(title.trim() || 'Meeting', text))}
+          >
             Import
           </button>
         </>
       }
     >
-      <Field label="Meeting title"><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+      <Field label="Meeting title">
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </Field>
       <Field label="Transcript">
         <textarea
           className="input"
           rows={14}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={'Priya: We need SSO for the enterprise tier.\nRahul: Agreed. Let us push the launch to November 20.\n\nTeams/Zoom/Meet .vtt exports also work.'}
+          placeholder={
+            'Priya: We need SSO for the enterprise tier.\nRahul: Agreed. Let us push the launch to November 20.\n\nTeams/Zoom/Meet .vtt exports also work.'
+          }
         />
       </Field>
       <ErrorBox error={error} />
@@ -403,18 +482,46 @@ function Stakeholders({ projectId }: { projectId: string }) {
   }
   return (
     <div className="col" style={{ gap: 12, maxWidth: 760 }}>
-      <p className="muted small">Stakeholders help the AI attribute statements and owners. You can map transcript speakers to them on a meeting page.</p>
+      <p className="muted small">
+        Stakeholders help the AI attribute statements and owners. You can map transcript speakers to them on a meeting page.
+      </p>
       <div className="row">
-        <input className="input grow" style={{ width: 'auto' }} placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && void add()} />
-        <input className="input grow" style={{ width: 'auto' }} placeholder="Role (e.g. Product owner)" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && void add()} />
-        <input className="input grow" style={{ width: 'auto' }} placeholder="Email (optional)" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && void add()} />
-        <button className="btn primary" disabled={busy} onClick={add}>Add</button>
+        <input
+          className="input grow"
+          style={{ width: 'auto' }}
+          placeholder="Name"
+          value={f.name}
+          onChange={(e) => setF({ ...f, name: e.target.value })}
+          onKeyDown={(e) => e.key === 'Enter' && void add()}
+        />
+        <input
+          className="input grow"
+          style={{ width: 'auto' }}
+          placeholder="Role (e.g. Product owner)"
+          value={f.role}
+          onChange={(e) => setF({ ...f, role: e.target.value })}
+          onKeyDown={(e) => e.key === 'Enter' && void add()}
+        />
+        <input
+          className="input grow"
+          style={{ width: 'auto' }}
+          placeholder="Email (optional)"
+          value={f.email}
+          onChange={(e) => setF({ ...f, email: e.target.value })}
+          onKeyDown={(e) => e.key === 'Enter' && void add()}
+        />
+        <button className="btn primary" disabled={busy} onClick={add}>
+          Add
+        </button>
       </div>
       <ErrorBox error={error} />
       <div className="list">
         {list.map((s) => (
           <div key={s.id} className="list-row" style={{ cursor: 'default' }}>
-            <div className="grow"><b>{s.name}</b> {s.role && <span className="muted">· {s.role}</span>} {s.email && <span className="muted small">· {s.email}</span>}</div>
+            <div className="grow">
+              <b>{s.name}</b> {s.role && <span className="muted">· {s.role}</span>}{' '}
+              {s.email && <span className="muted small">· {s.email}</span>}
+            </div>
             <button
               className="btn ghost sm"
               disabled={busy}
@@ -450,14 +557,22 @@ function History({ projectId, onOpenMeeting }: { projectId: string; onOpenMeetin
   useEffect(() => void api.listStateVersions(projectId).then(setVersions), [projectId])
   return (
     <div className="col" style={{ gap: 12, maxWidth: 900 }}>
-      <p className="muted small">Every approved meeting report creates a new version of the project state. This is how the project evolved, meeting by meeting.</p>
+      <p className="muted small">
+        Every approved meeting report creates a new version of the project state. This is how the project evolved, meeting by meeting.
+      </p>
       {versions.map((v) => (
         <div key={v.id} className="card col">
           <div className="row">
             <b>{v.meetingTitle ?? 'Manual change'}</b>
-            <span className="muted small">{fmtDate(v.createdAt)} · {v.changes.length} change{v.changes.length === 1 ? '' : 's'}</span>
+            <span className="muted small">
+              {fmtDate(v.createdAt)} · {v.changes.length} change{v.changes.length === 1 ? '' : 's'}
+            </span>
             <span className="grow" />
-            {v.meetingId && <button className="btn sm" onClick={() => onOpenMeeting(v.meetingId!)}>Open meeting</button>}
+            {v.meetingId && (
+              <button className="btn sm" onClick={() => onOpenMeeting(v.meetingId!)}>
+                Open meeting
+              </button>
+            )}
           </div>
           {v.changes.map((c, i) => {
             const [label, color] = OP_LABEL[c.op] ?? [c.op, '']
@@ -470,7 +585,11 @@ function History({ projectId, onOpenMeeting }: { projectId: string; onOpenMeetin
                 {c.op === 'update' && c.before && (
                   <span className="muted">
                     {Object.keys(c.after).map((k) => (
-                      <span key={k}> · {k}: <span className="diff-old">{String((c.before as Record<string, unknown>)[k] ?? '∅')}</span> → {String((c.after as Record<string, unknown>)[k])}</span>
+                      <span key={k}>
+                        {' '}
+                        · {k}: <span className="diff-old">{String((c.before as Record<string, unknown>)[k] ?? '∅')}</span> →{' '}
+                        {String((c.after as Record<string, unknown>)[k])}
+                      </span>
                     ))}
                   </span>
                 )}

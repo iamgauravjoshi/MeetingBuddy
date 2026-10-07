@@ -102,8 +102,21 @@ describe('proposal edits', () => {
     const m = db.createMeeting(p.id, 'M', 'analyzed')
     db.saveReport(m.id, 'mock', 'summary', 0, [
       {
-        category: 'decision', op: 'create', targetItemId: null, targetVersion: null, itemType: 'decision', title: 'Use Postgres', body: '',
-        owner: '', dueDate: '', speaker: 'Priya', strength: 'firm', confidence: 0.9, impact: 'high', rationale: '', evidence: []
+        category: 'decision',
+        op: 'create',
+        targetItemId: null,
+        targetVersion: null,
+        itemType: 'decision',
+        title: 'Use Postgres',
+        body: '',
+        owner: '',
+        dueDate: '',
+        speaker: 'Priya',
+        strength: 'firm',
+        confidence: 0.9,
+        impact: 'high',
+        rationale: '',
+        evidence: []
       }
     ])
     return db.getReport(m.id)!.proposals[0]

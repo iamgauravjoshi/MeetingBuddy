@@ -29,7 +29,17 @@ export function useAction(): { run: (action: () => Promise<unknown>) => Promise<
   return { run, busy, error }
 }
 
-export function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  footer?: ReactNode
+}) {
   useEffect(() => {
     const h = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
@@ -43,10 +53,16 @@ export function Modal({ title, onClose, children, footer }: { title: string; onC
       <div className="modal">
         <div className="row">
           <h2 className="grow">{title}</h2>
-          <button className="btn ghost sm" onClick={onClose}>✕</button>
+          <button className="btn ghost sm" onClick={onClose}>
+            ✕
+          </button>
         </div>
         {children}
-        {footer && <div className="row" style={{ justifyContent: 'flex-end' }}>{footer}</div>}
+        {footer && (
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   )

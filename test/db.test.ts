@@ -48,14 +48,19 @@ const raw = <T>(path: string, fn: (d: DatabaseSync) => T): T => {
   }
 }
 const userVersion = (d: DatabaseSync): number => (d.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
-const backups = (): string[] => readdirSync(dir).filter((f) => f.startsWith('meetingbuddy.db.bak')).sort()
+const backups = (): string[] =>
+  readdirSync(dir)
+    .filter((f) => f.startsWith('meetingbuddy.db.bak'))
+    .sort()
 
 // a v0.1 database with a project and an item in it
 const legacyDb = (version = 0): void =>
   raw(file, (d) => {
     d.exec(V01_SCHEMA)
     d.exec(`INSERT INTO projects VALUES ('p1', 'Phoenix', 'Clinic app', '2026-01-01T00:00:00Z')`)
-    d.exec(`INSERT INTO items (id, project_id, type, title, created_at, updated_at) VALUES ('i1', 'p1', 'decision', 'Use Postgres', 'x', 'x')`)
+    d.exec(
+      `INSERT INTO items (id, project_id, type, title, created_at, updated_at) VALUES ('i1', 'p1', 'decision', 'Use Postgres', 'x', 'x')`
+    )
     d.exec(`PRAGMA user_version = ${version}`)
   })
 
@@ -155,7 +160,12 @@ describe('meetings', () => {
     const m = db.createMeeting(p.id, 'M', 'ready')
     db.addSegments(m.id, [seg('old mic', 'mic'), seg('old system', 'system'), seg('pasted note', 'manual')])
     db.replaceSegments(m.id, ['mic', 'system'], [seg('new mic', 'mic')])
-    expect(db.listSegments(m.id).map((s) => s.text).sort()).toEqual(['new mic', 'pasted note'])
+    expect(
+      db
+        .listSegments(m.id)
+        .map((s) => s.text)
+        .sort()
+    ).toEqual(['new mic', 'pasted note'])
   })
 
   it('replaceSegments keeps the old segments if inserting the new ones fails', () => {
@@ -282,7 +292,11 @@ describe('tx', () => {
   })
 
   it('can start a new transaction after one failed', () => {
-    expect(() => db.tx(() => { throw new Error('x') })).toThrow()
+    expect(() =>
+      db.tx(() => {
+        throw new Error('x')
+      })
+    ).toThrow()
     db.tx(() => db.createProject('After', ''))
     expect(db.listProjects().map((p) => p.name)).toEqual(['After'])
   })
@@ -295,8 +309,21 @@ describe('reports', () => {
     const p = db.createProject('P', '')
     const m = db.createMeeting(p.id, 'M', 'analyzed')
     const proposal = (title: string) => ({
-      category: 'decision' as const, op: 'create' as const, targetItemId: null, targetVersion: null, itemType: 'decision' as const, title, body: '',
-      owner: '', dueDate: '', speaker: 'A', strength: 'firm' as const, confidence: 0.9, impact: 'high' as const, rationale: '', evidence: []
+      category: 'decision' as const,
+      op: 'create' as const,
+      targetItemId: null,
+      targetVersion: null,
+      itemType: 'decision' as const,
+      title,
+      body: '',
+      owner: '',
+      dueDate: '',
+      speaker: 'A',
+      strength: 'firm' as const,
+      confidence: 0.9,
+      impact: 'high' as const,
+      rationale: '',
+      evidence: []
     })
     const titles = ['Zeta', 'Alpha', 'Mu', 'Beta', 'Omega']
     db.saveReport(m.id, 'mock', 's', 0, titles.map(proposal))

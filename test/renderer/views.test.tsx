@@ -62,7 +62,14 @@ describe('creating a project', () => {
 
 describe('project page', () => {
   const view = (overrides: Record<string, (...a: any[]) => unknown> = {}) => {
-    fakeMb({ getProject: () => PROJECT, listItems: () => [ITEM], getItemHistory: () => [], listMeetings: () => [], listStakeholders: () => [], ...overrides })
+    fakeMb({
+      getProject: () => PROJECT,
+      listItems: () => [ITEM],
+      getItemHistory: () => [],
+      listMeetings: () => [],
+      listStakeholders: () => [],
+      ...overrides
+    })
     render(<ProjectView projectId="p1" onOpenMeeting={() => {}} onRecord={() => {}} onProjectsChanged={() => {}} />)
   }
 
@@ -92,7 +99,10 @@ describe('project page', () => {
   })
 
   it('shows why removing a stakeholder failed', async () => {
-    view({ listStakeholders: () => [{ id: 'st1', projectId: 'p1', name: 'Priya', role: '', email: '' }], deleteStakeholder: fail('Database is locked') })
+    view({
+      listStakeholders: () => [{ id: 'st1', projectId: 'p1', name: 'Priya', role: '', email: '' }],
+      deleteStakeholder: fail('Database is locked')
+    })
     fireEvent.click(await screen.findByText('Stakeholders'))
     fireEvent.click(await screen.findByText('Remove'))
     expect(await screen.findByText('Database is locked')).toBeTruthy()
@@ -151,8 +161,13 @@ describe('accept all firm', () => {
       { ...REPORT.proposals[0], id: 'c', title: 'Replace decision', op: 'supersede' as const, targetItemId: 'i1', targetVersion: 1 }
     ]
     const invoke = fakeMb({
-      getMeeting: () => MEETING, getTranscript: () => ({ segments: [SEGMENT], marks: [] }), getReport: () => ({ ...REPORT, proposals }),
-      listItems: () => [ITEM], listStakeholders: () => [], hasRecording: () => false, updateProposal: () => undefined
+      getMeeting: () => MEETING,
+      getTranscript: () => ({ segments: [SEGMENT], marks: [] }),
+      getReport: () => ({ ...REPORT, proposals }),
+      listItems: () => [ITEM],
+      listStakeholders: () => [],
+      hasRecording: () => false,
+      updateProposal: () => undefined
     })
     render(<MeetingView meetingId="m1" live={false} onLoaded={() => {}} onBack={() => {}} onOpenProject={() => {}} />)
     fireEvent.click(await screen.findByText('Accept all firm'))
@@ -182,8 +197,12 @@ describe('keyboard access', () => {
 
   it('reaches evidence quotes and the meeting title from the keyboard', async () => {
     fakeMb({
-      getMeeting: () => MEETING, getTranscript: () => ({ segments: [SEGMENT], marks: [] }), getReport: () => REPORT,
-      listItems: () => [], listStakeholders: () => [], hasRecording: () => false
+      getMeeting: () => MEETING,
+      getTranscript: () => ({ segments: [SEGMENT], marks: [] }),
+      getReport: () => REPORT,
+      listItems: () => [],
+      listStakeholders: () => [],
+      hasRecording: () => false
     })
     render(<MeetingView meetingId="m1" live={false} onLoaded={() => {}} onBack={() => {}} onOpenProject={() => {}} />)
     expect(await screen.findByRole('button', { name: /We will use Postgres/ })).toBeTruthy()

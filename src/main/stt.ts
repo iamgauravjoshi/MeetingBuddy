@@ -76,7 +76,13 @@ async function request(
   const self = s.selfName || 'Me'
 
   if (s.sttProvider === 'deepgram') {
-    const params = new URLSearchParams({ model, smart_format: 'true', punctuate: 'true', utterances: 'true', diarize: String(source === 'system') })
+    const params = new URLSearchParams({
+      model,
+      smart_format: 'true',
+      punctuate: 'true',
+      utterances: 'true',
+      diarize: String(source === 'system')
+    })
     const res = await fetch(`https://api.deepgram.com/v1/listen?${params}`, {
       method: 'POST',
       headers: { Authorization: `Token ${key}`, 'Content-Type': mime },
@@ -104,16 +110,32 @@ async function request(
   form.append('model', model)
   form.append('response_format', 'verbose_json')
   form.append('timestamp_granularities[]', 'segment')
-  const res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal })
+  const res = await fetch(`${base}/audio/transcriptions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}` },
+    body: form,
+    signal
+  })
   if (!res.ok) throw new Error(`${s.sttProvider} transcription error ${res.status}: ${await res.text()}`)
   const json = (await res.json()) as { text?: string; segments?: { start: number; end: number; text: string }[] }
   const segs = json.segments ?? (json.text ? [{ start: 0, end: 0, text: json.text }] : [])
   return segs
     .filter((g) => g.text.trim())
-    .map((g) => ({ speaker: source === 'mic' ? self : 'Others', tStart: offsetSec + g.start, tEnd: offsetSec + g.end, text: g.text.trim(), source }))
+    .map((g) => ({
+      speaker: source === 'mic' ? self : 'Others',
+      tStart: offsetSec + g.start,
+      tEnd: offsetSec + g.end,
+      text: g.text.trim(),
+      source
+    }))
 }
 
-const words = (t: string): string[] => t.toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, ' ').split(/\s+/).filter(Boolean)
+const words = (t: string): string[] =>
+  t
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} ]+/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
 
 /**
  * Without headphones the mic also hears the speakers, so remote speech shows up twice.

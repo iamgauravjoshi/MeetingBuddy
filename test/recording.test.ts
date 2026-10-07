@@ -32,7 +32,13 @@ import { api } from '../src/main/api'
 import { CHUNK_TIMEOUT_MS, FILE_TIMEOUT_MS } from '../src/main/stt'
 
 const bytes = (s: string): Uint8Array => new Uint8Array(Buffer.from(s))
-const said = (text: string, source: SegmentSource, t = 0) => ({ speaker: source === 'mic' ? 'Me' : 'Speaker 1', tStart: t, tEnd: t + 2, text, source })
+const said = (text: string, source: SegmentSource, t = 0) => ({
+  speaker: source === 'mic' ? 'Me' : 'Speaker 1',
+  tStart: t,
+  tEnd: t + 2,
+  text,
+  source
+})
 const texts = (meetingId: string): string[] => db.listSegments(meetingId).map((s) => s.text)
 const settled = (meetingId: string) => vi.waitFor(() => expect(db.getMeeting(meetingId)?.status).toBe('ready'))
 
@@ -93,7 +99,9 @@ describe('finishing a meeting', () => {
     const m = api.startRecording(projectId, 'T', '')
     api.appendRecordingChunk(m.id, 'mic', bytes('m'))
     api.appendRecordingChunk(m.id, 'system', bytes('s'))
-    transcribe.mockResolvedValueOnce([said('chunk mic alpha bravo', 'mic')]).mockResolvedValueOnce([said('chunk system charlie delta', 'system')])
+    transcribe
+      .mockResolvedValueOnce([said('chunk mic alpha bravo', 'mic')])
+      .mockResolvedValueOnce([said('chunk system charlie delta', 'system')])
     await api.recordingChunk(m.id, 'mic', 0, bytes('x'))
     await api.recordingChunk(m.id, 'system', 0, bytes('y'))
     return m.id
@@ -101,7 +109,9 @@ describe('finishing a meeting', () => {
 
   it('replaces the live transcript with the full-file transcript', async () => {
     const id = await recorded()
-    transcribe.mockResolvedValueOnce([said('final mic echo foxtrot', 'mic')]).mockResolvedValueOnce([said('final system golf hotel', 'system')])
+    transcribe
+      .mockResolvedValueOnce([said('final mic echo foxtrot', 'mic')])
+      .mockResolvedValueOnce([said('final system golf hotel', 'system')])
     api.stopRecording(id)
     await settled(id)
     expect(texts(id).sort()).toEqual(['final mic echo foxtrot', 'final system golf hotel'])

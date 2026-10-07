@@ -9,16 +9,44 @@ import { describeChanges, matchQuote, quoteMatches, validateChanges } from '../s
 import type { Item, Segment } from '@shared/types'
 
 const seg = (id: string, speaker: string, text: string, t = 0): Segment => ({
-  id, meetingId: 'm', idx: 0, speaker, tStart: t, tEnd: t + 5, text, source: 'manual'
+  id,
+  meetingId: 'm',
+  idx: 0,
+  speaker,
+  tStart: t,
+  tEnd: t + 5,
+  text,
+  source: 'manual'
 })
 const item = (id: string, type: Item['type'], title: string): Item => ({
-  id, projectId: 'p', type, title, body: '', status: 'open', owner: '', dueDate: '', version: 1, createdAt: '', updatedAt: ''
+  id,
+  projectId: 'p',
+  type,
+  title,
+  body: '',
+  status: 'open',
+  owner: '',
+  dueDate: '',
+  version: 1,
+  createdAt: '',
+  updatedAt: ''
 })
 
 const change = (over: Record<string, unknown> = {}) => ({
-  category: 'decision' as const, op: 'create' as const, target_item: null, item_type: 'decision' as const,
-  title: 'Use Postgres', body: '', owner: '', due_date: '', speaker: 'Priya', strength: 'firm' as const,
-  confidence: 0.9, impact: 'high' as const, rationale: '', evidence: [{ line: 'S1', quote: 'we will use Postgres' }],
+  category: 'decision' as const,
+  op: 'create' as const,
+  target_item: null,
+  item_type: 'decision' as const,
+  title: 'Use Postgres',
+  body: '',
+  owner: '',
+  due_date: '',
+  speaker: 'Priya',
+  strength: 'firm' as const,
+  confidence: 0.9,
+  impact: 'high' as const,
+  rationale: '',
+  evidence: [{ line: 'S1', quote: 'we will use Postgres' }],
   ...over
 })
 
@@ -33,10 +61,17 @@ describe('quoteMatches', () => {
     expect(quoteMatches('we will definitely ship on the twentieth', 'we will um definitely ship it on the twentieth')).toBe(true)
   })
   it('rejects a quote that inserts a negation', () => {
-    expect(quoteMatches('we will definitely not ship the mobile app on friday', 'We will definitely ship the mobile app on Friday after the review.')).toBe(false)
+    expect(
+      quoteMatches(
+        'we will definitely not ship the mobile app on friday',
+        'We will definitely ship the mobile app on Friday after the review.'
+      )
+    ).toBe(false)
   })
   it('rejects a quote that drops a negation', () => {
-    expect(quoteMatches('we will ship the mobile app on friday after the review', 'We will not ship the mobile app on Friday after the review.')).toBe(false)
+    expect(
+      quoteMatches('we will ship the mobile app on friday after the review', 'We will not ship the mobile app on Friday after the review.')
+    ).toBe(false)
   })
   it('matches whole words only', () => {
     expect(quoteMatches('use the budget', 'we waited because the budget froze')).toBe(false)
@@ -45,7 +80,9 @@ describe('quoteMatches', () => {
     expect(quoteMatches('use postgres', 'we will use postgres')).toBe(false)
   })
   it('rejects quote words scattered across a long line', () => {
-    expect(quoteMatches('we ship app friday', 'we discussed whether to ship the new onboarding flow or the old app before the review on friday')).toBe(false)
+    expect(
+      quoteMatches('we ship app friday', 'we discussed whether to ship the new onboarding flow or the old app before the review on friday')
+    ).toBe(false)
   })
 })
 
@@ -65,7 +102,10 @@ describe('matchQuote', () => {
 
 describe('validateChanges', () => {
   const segments = [seg('a', 'Priya', 'OK, so we will use Postgres for the MVP.', 0), seg('b', 'Rahul', 'Launch moves to November 20.', 10)]
-  const segRef = new Map([['S1', segments[0]], ['S2', segments[1]]])
+  const segRef = new Map([
+    ['S1', segments[0]],
+    ['S2', segments[1]]
+  ])
   const items = [item('i1', 'deadline', 'Launch on Nov 1')]
   const itemRef = new Map([['DL-1', items[0]]])
 
@@ -79,7 +119,12 @@ describe('validateChanges', () => {
     expect(kept[0].evidence[0].quote).toBe('we will use Postgres')
   })
   it('drops changes whose quotes are not in the transcript', () => {
-    const { kept, dropped } = validateChanges([change({ evidence: [{ line: 'S1', quote: 'we will use MongoDB' }] })], segRef, itemRef, segments)
+    const { kept, dropped } = validateChanges(
+      [change({ evidence: [{ line: 'S1', quote: 'we will use MongoDB' }] })],
+      segRef,
+      itemRef,
+      segments
+    )
     expect(kept).toHaveLength(0)
     expect(dropped).toBe(1)
   })
@@ -88,7 +133,13 @@ describe('validateChanges', () => {
     expect(kept[0].evidence[0].segmentId).toBe('a')
   })
   it('resolves target item refs and downgrades unknown targets to create', () => {
-    const upd = change({ category: 'timeline_change', op: 'update', target_item: 'DL-1', item_type: 'deadline', evidence: [{ line: 'S2', quote: 'Launch moves to November 20' }] })
+    const upd = change({
+      category: 'timeline_change',
+      op: 'update',
+      target_item: 'DL-1',
+      item_type: 'deadline',
+      evidence: [{ line: 'S2', quote: 'Launch moves to November 20' }]
+    })
     const bad = change({ op: 'update', target_item: 'DEC-99' })
     const { kept } = validateChanges([upd, bad], segRef, itemRef, segments)
     expect(kept.find((k) => k.category === 'timeline_change')).toMatchObject({ op: 'update', targetItemId: 'i1' })
@@ -105,7 +156,14 @@ describe('describeChanges', () => {
 
   it('shows what an update changed, shortening long values', () => {
     const [line] = describeChanges([
-      { op: 'update', itemId: 'i', itemType: 'requirement', title: 'SSO', before: { body: '', owner: 'Priya' }, after: { body: 'x'.repeat(200), owner: 'Rahul' } }
+      {
+        op: 'update',
+        itemId: 'i',
+        itemType: 'requirement',
+        title: 'SSO',
+        before: { body: '', owner: 'Priya' },
+        after: { body: 'x'.repeat(200), owner: 'Rahul' }
+      }
     ])
     expect(line).toBe(`Changed requirement "SSO": body ∅ → ${'x'.repeat(79)}…; owner Priya → Rahul`)
   })

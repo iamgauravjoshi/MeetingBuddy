@@ -54,6 +54,7 @@ export function MeetingView(props: {
   const [mapSpeakers, setMapSpeakers] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [hasAudio, setHasAudio] = useState(false)
+  const [skipped, setSkipped] = useState<{ proposalId: string; title: string; reason: string }[]>([])
   const transcriptRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -115,7 +116,11 @@ export function MeetingView(props: {
   const proposals = report?.proposals ?? []
   const pending = proposals.filter((p) => p.status === 'pending').length
   const accepted = proposals.filter((p) => p.status === 'accepted').length
-  const canAnalyze = segments.length > 0 && !props.live && meeting.status !== 'transcribing'
+  const analyzing = meeting.status === 'analyzing'
+  // re-analysis would replace the report the project state was built from
+  const applied = meeting.status === 'applied' || proposals.some((p) => p.status === 'applied')
+  const canAnalyze = segments.length > 0 && !props.live && meeting.status !== 'transcribing' && !analyzing && !applied
+  const reviewed = proposals.filter((p) => p.status !== 'pending').length
 
   return (
     <div className="col" style={{ gap: 12 }}>
@@ -128,11 +133,20 @@ export function MeetingView(props: {
             {meeting.sourceApp && meeting.sourceApp !== 'import' && ` · ${meeting.sourceApp}`} · {segments.length} transcript lines
             {props.live && <span className="badge red" style={{ marginLeft: 8 }}>LIVE</span>}
             {meeting.status === 'transcribing' && <span className="badge amber" style={{ marginLeft: 8 }}>Processing…</span>}
+            {analyzing && <span className="badge amber" style={{ marginLeft: 8 }}>Analyzing…</span>}
           </div>
         </div>
         <span className="spacer" />
         {speakers.length > 0 && <button className="btn" onClick={() => setMapSpeakers(true)}>Map speakers</button>}
-        <button className="btn primary" disabled={!canAnalyze || !!busy} onClick={() => void run('Analyzing meeting against project state…', () => api.analyzeMeeting(meeting.id))}>
+        <button
+          className="btn primary"
+          disabled={!canAnalyze || !!busy}
+          title={applied ? "This meeting's changes are applied to the project, so it can't be re-analyzed." : undefined}
+          onClick={() => {
+            if (reviewed > 0 && !confirm(`Re-analyzing replaces this report. Your decisions on ${reviewed} proposed change${reviewed === 1 ? '' : 's'} will be lost.`)) return
+            void run('Analyzing meeting against project state…', () => api.analyzeMeeting(meeting.id))
+          }}
+        >
           {report ? 'Re-analyze' : 'Analyze impact'}
         </button>
         <button
@@ -159,6 +173,20 @@ export function MeetingView(props: {
         </div>
       )}
       <ErrorBox error={error} />
+      {skipped.length > 0 && (
+        <div className="error">
+          <b>
+            {skipped.length} approved change{skipped.length === 1 ? ' was' : 's were'} not applied because the project changed since this meeting
+            was analyzed:
+          </b>
+          {skipped.map((s) => (
+            <div key={s.proposalId} className="small">
+              • {s.title}: {s.reason}
+            </div>
+          ))}
+          <div className="small muted">They stay accepted. Reject them, or update the project state by hand.</div>
+        </div>
+      )}
 
       <div className="meeting-grid">
         <section className="col">
@@ -202,10 +230,11 @@ export function MeetingView(props: {
                 </button>
                 <button
                   className="btn sm success"
-                  disabled={accepted === 0 || !!busy}
+                  disabled={accepted === 0 || !!busy || analyzing}
                   onClick={() =>
                     void run('Updating project state…', async () => {
-                      await api.applyApproved(meeting.id)
+                      const result = await api.applyApproved(meeting.id)
+                      setSkipped(result.skipped)
                     })
                   }
                 >

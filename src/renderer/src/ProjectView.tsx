@@ -19,6 +19,7 @@ const MEETING_STATUS: Record<Meeting['status'], [string, string]> = {
   recording: ['Recording', 'red'],
   transcribing: ['Processing…', 'amber'],
   ready: ['Transcript ready', 'blue'],
+  analyzing: ['Analyzing…', 'amber'],
   analyzed: ['Report needs review', 'purple'],
   applied: ['Applied', 'green']
 }

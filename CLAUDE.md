@@ -93,11 +93,18 @@ There is no linter configured.
   - Proposals with no valid evidence are dropped and counted in `report.droppedCount`.
   - Unknown target refs are downgraded to `create`.
   - An unknown speaker falls back to the speaker of the evidence segment.
-- **`applyApproved`** applies only `accepted` proposals, inside one transaction:
-  - It writes `item_history` rows, which are the per-item "blame".
-  - It writes one `state_versions` row containing a before/after diff.
+- **`analyzeMeeting`** allows one analysis per meeting at a time:
+  - A second call while one is running gets the same promise.
+  - The meeting is `analyzing` while it runs, and goes back to its previous status if the analysis fails.
+  - A meeting that is `applied`, or has any applied proposal, is refused, because re-analyzing would replace the report the project state came from.
+- **`applyApproved`** applies only `accepted` proposals, inside one transaction. It returns `{ applied, skipped }`:
+  - Each proposal stores `targetVersion`, the target item's version at analysis time. `update`/`close`/`supersede` proposals whose target was deleted or has a different version are **skipped**. They stay `accepted` and are reported with a reason, and never fall back to creating a new item.
+  - Staleness is checked for all proposals before any is applied, so changes in the same batch don't invalidate each other.
+  - It refuses to run while the meeting is `analyzing`. The meeting becomes `applied` only if something was applied.
+  - It writes `item_history` rows, which are the per-item "blame", and one `state_versions` row containing a before/after diff.
   - `supersede` marks the old item `superseded` and creates a new one.
   - `flag` (a conflict) creates an open `question` item named "Resolve conflict: …".
+- **`db.updateItem` ignores patches that change nothing:** the version, `updatedAt`, history and state diff are left alone. `api.updateItem` records only the fields that changed. `api.updateProposal` refuses to edit applied proposals or mark one applied.
 - **Previous meetings feed the next analysis:** each meeting's report summary is passed into later analyses via `recentMeetingSummaries`.
 
 ### Data and settings

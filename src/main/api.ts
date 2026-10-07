@@ -145,8 +145,13 @@ export const api = {
     return it
   },
   updateItem: (id: string, patch: Partial<Pick<Item, 'title' | 'body' | 'status' | 'owner' | 'dueDate' | 'type'>>) => {
+    const cur = db.getItem(id)
+    if (!cur) throw new Error('This item no longer exists.')
+    // the edit form sends every field; record only the ones that really changed
+    const changed = db.changedFields(cur, patch)
+    if (changed.length === 0) return cur
     const it = db.updateItem(id, patch)
-    db.addItemHistory({ itemId: id, meetingId: null, summary: `Edited manually: ${Object.keys(patch).join(', ')}`, speaker: '', quote: '' })
+    db.addItemHistory({ itemId: id, meetingId: null, summary: `Edited manually: ${changed.join(', ')}`, speaker: '', quote: '' })
     return it
   },
   deleteItem: (id: string) => db.deleteItem(id),
@@ -226,6 +231,9 @@ export const api = {
   /** Transcribes and analyzes saved audio again, e.g. after an interrupted recording or a failed transcription. */
   transcribeRecording: (meetingId: string) => {
     if (getSettings().sttProvider === 'none') throw new Error('Choose a speech-to-text provider in Settings first.')
+    const status = db.getMeeting(meetingId)?.status
+    if (status === 'applied') throw new Error("This meeting's changes were already applied to the project, so it can't be transcribed again.")
+    if (status === 'analyzing') throw new Error('An analysis is running for this meeting. Try again after it finishes.')
     db.updateMeeting(meetingId, { status: 'transcribing', error: null })
     void finishMeeting(meetingId)
   },
@@ -239,8 +247,12 @@ export const api = {
   // analysis & approval
   analyzeMeeting: (meetingId: string) => analyzeMeeting(meetingId),
   getReport: (meetingId: string) => db.getReport(meetingId),
-  updateProposal: (id: string, patch: Partial<Pick<Proposal, 'status' | 'title' | 'body' | 'owner' | 'dueDate' | 'itemType'>>) =>
-    db.updateProposal(id, patch),
+  updateProposal: (id: string, patch: Partial<Pick<Proposal, 'status' | 'title' | 'body' | 'owner' | 'dueDate' | 'itemType'>>) => {
+    // only applyApproved marks proposals applied, and what was applied stays as it was
+    if (patch.status === 'applied') throw new Error('Proposals are marked applied only by applying them.')
+    if (db.getProposal(id)?.status === 'applied') throw new Error('This change was already applied to the project and can no longer be edited.')
+    db.updateProposal(id, patch)
+  },
   applyApproved: (meetingId: string) => applyApproved(meetingId)
 }
 

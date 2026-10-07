@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { randomUUID } from 'node:crypto'
+import { readdirSync, rmSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import type {
   Evidence,
   Item,
@@ -18,11 +20,15 @@ import type {
 } from '@shared/types'
 
 let db: DatabaseSync
+let txDepth = 0
 
-const SCHEMA = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
+/**
+ * Schema migrations, in order. Migration i brings the database to `PRAGMA user_version` i + 1.
+ * Never edit one that has shipped; append a new one instead.
+ */
+export const MIGRATIONS: string[] = [
+  // 1: the v0.1 schema. IF NOT EXISTS lets databases created before migrations existed (version 0) pass through unchanged.
+  `
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
@@ -73,27 +79,83 @@ CREATE TABLE IF NOT EXISTS state_versions (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL, created_at TEXT NOT NULL, changes TEXT NOT NULL
 );
+`,
+  // 2: indexes on the foreign keys every project and meeting page filters by
+  `
+CREATE INDEX IF NOT EXISTS stakeholders_project ON stakeholders(project_id);
+CREATE INDEX IF NOT EXISTS items_project ON items(project_id);
+CREATE INDEX IF NOT EXISTS item_history_item ON item_history(item_id);
+CREATE INDEX IF NOT EXISTS meetings_project ON meetings(project_id, started_at);
+CREATE INDEX IF NOT EXISTS marks_meeting ON marks(meeting_id);
+CREATE INDEX IF NOT EXISTS reports_meeting ON reports(meeting_id);
+CREATE INDEX IF NOT EXISTS proposals_report ON proposals(report_id);
+CREATE INDEX IF NOT EXISTS state_versions_project ON state_versions(project_id, created_at);
 `
+]
 
 export function openDb(file: string): void {
   db = new DatabaseSync(file)
-  db.exec(SCHEMA)
+  txDepth = 0
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
+  try {
+    migrate(file)
+  } catch (e) {
+    db.close()
+    throw e
+  }
+}
+
+export function closeDb(): void {
+  if (db?.isOpen) db.close()
+}
+
+function migrate(file: string): void {
+  const version = (db.prepare('PRAGMA user_version').get() as Row).user_version as number
+  if (version > MIGRATIONS.length) {
+    throw new Error(`This database was created by a newer version of MeetingBuddy (schema ${version}). Update the app to open it.`)
+  }
+  if (version === MIGRATIONS.length) return
+  const isNew = (db.prepare('SELECT COUNT(*) AS n FROM sqlite_master').get() as Row).n === 0
+  if (!isNew && file !== ':memory:') backup(file, version)
+  for (let v = version; v < MIGRATIONS.length; v++) {
+    tx(() => {
+      db.exec(MIGRATIONS[v])
+      db.exec(`PRAGMA user_version = ${v + 1}`)
+    })
+  }
+}
+
+/** Snapshots the database (including unflushed WAL pages) to <file>.bak-v<version> and deletes older backups. */
+function backup(file: string, version: number): void {
+  const target = `${file}.bak-v${version}`
+  rmSync(target, { force: true })
+  db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`)
+  const prefix = `${basename(file)}.bak-v`
+  for (const f of readdirSync(dirname(file))) {
+    if (f.startsWith(prefix) && f !== basename(target)) rmSync(join(dirname(file), f), { force: true })
+  }
 }
 
 const now = (): string => new Date().toISOString()
 const id = (): string => randomUUID()
 type Row = Record<string, any>
 
+/** Runs fn in a transaction. Nested calls become savepoints, so a failing inner call rolls back only its own work. */
 export function tx<T>(fn: () => T): T {
-  db.exec('BEGIN')
+  const savepoint = txDepth > 0 ? `sp${txDepth}` : null
+  db.exec(savepoint ? `SAVEPOINT ${savepoint}` : 'BEGIN')
+  txDepth++
+  let result: T
   try {
-    const r = fn()
-    db.exec('COMMIT')
-    return r
+    result = fn()
   } catch (e) {
-    db.exec('ROLLBACK')
+    txDepth--
+    db.exec(savepoint ? `ROLLBACK TO ${savepoint}; RELEASE ${savepoint}` : 'ROLLBACK')
     throw e
   }
+  txDepth--
+  db.exec(savepoint ? `RELEASE ${savepoint}` : 'COMMIT')
+  return result
 }
 
 // ---------- mappers ----------

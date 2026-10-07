@@ -13,15 +13,24 @@ npm run dev                         # electron-vite dev with hot reload
 npm run build                       # bundle main/preload/renderer into out/
 npm start                           # run the built app (electron-vite preview)
 npm run typecheck                   # tsc for tsconfig.node.json (main/preload/shared) and tsconfig.web.json (renderer)
-npm test                            # vitest run (test/**/*.test.ts)
+npm test                            # vitest run (test/**/*.test.ts and test/**/*.test.tsx)
 npx vitest run test/analysis.test.ts        # single file
 npx vitest run -t "drops changes whose"     # single test by name
+npm run lint                        # Biome lint
+npm run format                      # Biome format --write
+npm run check                       # Biome ci: lint + formatting check (runs in CI)
 npm run dist:win                    # build + electron-builder → release/MeetingBuddy Setup x.y.z.exe
 ```
 
 To run the app against throwaway data instead of `%APPDATA%\MeetingBuddy`, pass `--user-data-dir=<dir>`, for example `npx electron . --user-data-dir=<dir> --remote-debugging-port=9333`. The remote-debugging port lets a CDP script drive the UI.
 
-There is no linter configured.
+**Linting and formatting use Biome** (`biome.jsonc`), not ESLint/Prettier:
+- TypeScript 7 is the native port and has no JS API for typescript-eslint.
+- The style is 2 spaces, single quotes, no semicolons, no trailing commas and 140 columns. Run `npm run format` before committing.
+- `.gitattributes` forces LF checkouts, so Windows' `core.autocrlf` doesn't make every file fail the format check.
+- Disabled rules and in-place `biome-ignore` comments each say why.
+- Node globals are errors in `src/renderer/`, because the renderer is sandboxed.
+- Formatting-only commits go in `.git-blame-ignore-revs`.
 
 ## Toolchain constraints (non-obvious)
 

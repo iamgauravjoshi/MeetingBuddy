@@ -212,6 +212,9 @@ export function getItemHistory(iid: string): ItemHistoryEntry[] {
 export function listMeetings(pid: string): Meeting[] {
   return (db.prepare('SELECT * FROM meetings WHERE project_id = ? ORDER BY started_at DESC').all(pid) as Row[]).map(toMeeting)
 }
+export function listMeetingIds(): string[] {
+  return (db.prepare('SELECT id FROM meetings').all() as Row[]).map((r) => r.id as string)
+}
 export function getMeeting(mid: string): Meeting | null {
   const r = db.prepare('SELECT * FROM meetings WHERE id = ?').get(mid) as Row | undefined
   return r ? toMeeting(r) : null

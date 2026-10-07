@@ -1,0 +1,119 @@
+import { api } from './api'
+
+type Source = 'mic' | 'system'
+const MIME = 'audio/webm;codecs=opus'
+const BITRATE = 24000 // ~11 MB per hour per stream; keeps full files under Whisper's 25 MB limit
+
+interface Track {
+  source: Source
+  stream: MediaStream
+  full: MediaRecorder
+  fullChunks: Blob[]
+  chunkRec: MediaRecorder | null
+  chunkStart: number
+}
+
+/**
+ * Captures the microphone (you) and system loopback audio (everyone else) as separate streams.
+ * Each stream gets a continuous recording (for the final, consistent transcription) and, optionally,
+ * a rolling chunk recorder whose chunks are transcribed live for the side panel.
+ */
+export class MeetingRecorder {
+  private tracks: Track[] = []
+  private timer: number | null = null
+  private startedAt = 0
+  private stopping = false
+  warnings: string[] = []
+
+  constructor(
+    private meetingId: string,
+    private chunkSeconds: number,
+    private onError: (msg: string) => void
+  ) {}
+
+  elapsed(): number {
+    return (Date.now() - this.startedAt) / 1000
+  }
+
+  async start(): Promise<void> {
+    const mic = await navigator.mediaDevices
+      .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      .catch((e) => {
+        this.warnings.push(`Microphone unavailable: ${e.message}`)
+        return null
+      })
+    let system: MediaStream | null = null
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+      display.getVideoTracks().forEach((t) => t.stop())
+      if (display.getAudioTracks().length) system = new MediaStream(display.getAudioTracks())
+      else this.warnings.push('System audio is unavailable, so only your microphone will be recorded.')
+    } catch (e) {
+      this.warnings.push(`System audio unavailable: ${(e as Error).message}`)
+    }
+    if (!mic && !system) throw new Error('No audio source could be captured.')
+
+    this.startedAt = Date.now()
+    for (const [source, stream] of [['mic', mic], ['system', system]] as const) {
+      if (!stream) continue
+      const full = new MediaRecorder(stream, { mimeType: MIME, audioBitsPerSecond: BITRATE })
+      const t: Track = { source, stream, full, fullChunks: [], chunkRec: null, chunkStart: 0 }
+      full.ondataavailable = (e) => e.data.size && t.fullChunks.push(e.data)
+      full.start(5000)
+      this.tracks.push(t)
+      if (this.chunkSeconds > 0) this.startChunk(t)
+    }
+    if (this.chunkSeconds > 0) {
+      this.timer = window.setInterval(() => this.tracks.forEach((t) => this.rotateChunk(t)), this.chunkSeconds * 1000)
+    }
+  }
+
+  private startChunk(t: Track): void {
+    const rec = new MediaRecorder(t.stream, { mimeType: MIME, audioBitsPerSecond: BITRATE })
+    const offset = this.elapsed()
+    const parts: Blob[] = []
+    rec.ondataavailable = (e) => e.data.size && parts.push(e.data)
+    rec.onstop = async () => {
+      const blob = new Blob(parts, { type: MIME })
+      if (blob.size < 2000) return
+      try {
+        await api.recordingChunk(this.meetingId, t.source, offset, new Uint8Array(await blob.arrayBuffer()))
+      } catch (e) {
+        this.onError(`Live transcription: ${(e as Error).message}`)
+      }
+    }
+    rec.start()
+    t.chunkRec = rec
+    t.chunkStart = offset
+  }
+
+  private rotateChunk(t: Track): void {
+    t.chunkRec?.stop()
+    if (!this.stopping) this.startChunk(t)
+  }
+
+  async stop(): Promise<void> {
+    this.stopping = true
+    if (this.timer) window.clearInterval(this.timer)
+    await Promise.all(
+      this.tracks.map(
+        (t) =>
+          new Promise<void>((resolve) => {
+            t.chunkRec?.stop()
+            t.full.onstop = async () => {
+              try {
+                const blob = new Blob(t.fullChunks, { type: MIME })
+                await api.saveRecordingFile(this.meetingId, t.source, new Uint8Array(await blob.arrayBuffer()))
+              } catch (e) {
+                this.onError(`Saving ${t.source} audio failed: ${(e as Error).message}`)
+              }
+              resolve()
+            }
+            t.full.stop()
+          })
+      )
+    )
+    this.tracks.forEach((t) => t.stream.getTracks().forEach((tr) => tr.stop()))
+    this.tracks = []
+  }
+}

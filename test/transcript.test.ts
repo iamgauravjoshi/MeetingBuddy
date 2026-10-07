@@ -1,0 +1,42 @@
+import { describe, expect, it, vi } from 'vitest'
+vi.mock('../src/main/settings', () => ({}))
+import { parseTranscript } from '../src/main/transcriptParser'
+import { mergeStreams } from '../src/main/stt'
+
+describe('parseTranscript', () => {
+  it('parses plain "Name: text" lines and merges continuations', () => {
+    const segs = parseTranscript('Priya: We need SSO.\nIt is a must for enterprise.\nRahul: Agreed.')
+    expect(segs.map((s) => [s.speaker, s.text])).toEqual([
+      ['Priya', 'We need SSO. It is a must for enterprise.'],
+      ['Rahul', 'Agreed.']
+    ])
+  })
+  it('parses Teams VTT voice tags with timestamps', () => {
+    const vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:04.500\n<v Priya Shah>We need SSO.</v>\n\n00:00:05.000 --> 00:00:07.000\n<v Rahul>Agreed.</v>\n'
+    const segs = parseTranscript(vtt)
+    expect(segs).toHaveLength(2)
+    expect(segs[0]).toMatchObject({ speaker: 'Priya Shah', text: 'We need SSO.', tStart: 1, tEnd: 4.5 })
+  })
+  it('parses SRT with speaker prefixes', () => {
+    const srt = '1\n00:01:00,000 --> 00:01:03,000\nAnita: Budget is frozen.\n\n2\n00:01:04,000 --> 00:01:06,000\nAnita: Until Q3.\n'
+    const segs = parseTranscript(srt)
+    expect(segs).toHaveLength(1)
+    expect(segs[0]).toMatchObject({ speaker: 'Anita', tStart: 60, text: 'Budget is frozen. Until Q3.' })
+  })
+  it('parses Zoom txt exports', () => {
+    const segs = parseTranscript('[Priya] 00:02:10\nShip it Friday.\n[Rahul] 00:02:15\nOK.')
+    expect(segs.map((s) => [s.speaker, s.tStart])).toEqual([['Priya', 130], ['Rahul', 135]])
+  })
+})
+
+describe('mergeStreams', () => {
+  it('drops mic echo of remote speech but keeps the local user', () => {
+    const mic = [
+      { speaker: 'Me', tStart: 0, tEnd: 3, text: 'Hi all, quick update from me', source: 'mic' as const },
+      { speaker: 'Me', tStart: 10, tEnd: 13, text: 'launch moves to november twenty', source: 'mic' as const }
+    ]
+    const sys = [{ speaker: 'Speaker 1', tStart: 10.5, tEnd: 13, text: 'Launch moves to November twenty.', source: 'system' as const }]
+    const out = mergeStreams(mic, sys)
+    expect(out.map((s) => s.speaker)).toEqual(['Me', 'Speaker 1'])
+  })
+})

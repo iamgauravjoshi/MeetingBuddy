@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd D:\\\\okruti_projects\\\\MeetingBuddy; Get-Content C:\\\\Users\\\\gjosh\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--okruti-projects-MeetingBuddy\\\\794f8ab1-64d9-49ac-b725-bad966f1adec\\\\tasks\\\\bla5qr83c.output; Get-Content package.json; Set-Content -Encoding utf8 $env:TEMP\\\\sq.js \"const s=require\\('node:sqlite'\\);const d=new s.DatabaseSync\\(':memory:'\\);console.log\\('SQLITE_OK',d.prepare\\('select sqlite_version\\(\\) v'\\).get\\(\\), process.versions.electron, process.versions.node\\);process.exit\\(0\\)\"; $env:ELECTRON_RUN_AS_NODE=$null; npx electron $env:TEMP\\\\sq.js)"
+    ]
+  }
+}

@@ -98,7 +98,12 @@ There is no linter configured.
 ### Data and settings
 
 - `db.ts` is a thin query layer over the `node:sqlite` `DatabaseSync`. Columns are snake_case and get mapped to the camelCase types in `src/shared/types.ts`.
-- `db.tx()` uses a plain `BEGIN`/`COMMIT`, which **does not nest**. Don't call `addSegments` or `saveReport` (which open their own transactions) inside another `tx`.
+- **Schema changes go through `MIGRATIONS` in `db.ts`**, tracked by `PRAGMA user_version`:
+  - Append a new migration; never edit one that has shipped.
+  - Each migration runs in its own transaction.
+  - Before migrating an existing database, `openDb` snapshots it with `VACUUM INTO` to `meetingbuddy.db.bak-v<oldVersion>`, keeping only the latest backup.
+  - A database with a newer `user_version` than the app knows is refused.
+- `db.tx()` nests: the outermost call is `BEGIN`/`COMMIT`, and inner calls become savepoints. Helpers that open their own transaction (`addSegments`, `saveReport`) can run inside a larger `tx`, and an inner failure rolls back only its own work.
 - A meeting keeps only its latest report: `saveReport` deletes older ones.
 - Recordings live in `<userData>/audio/<meetingId>/{mic,system}.webm`. `audio.ts` owns that folder:
   - `meetingAudioDir` only accepts meeting UUIDs, so an id from IPC can't reach paths outside it.

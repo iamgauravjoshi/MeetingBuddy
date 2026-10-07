@@ -81,6 +81,10 @@ describe('migrations', () => {
     db.openDb(file)
     expect(db.listProjects().map((p) => p.name)).toEqual(['Phoenix'])
     expect(db.getItem('i1')?.title).toBe('Use Postgres')
+    // columns added by later migrations work on the upgraded database
+    const m = db.createMeeting('p1', 'After upgrade', 'ready')
+    db.updateMeeting(m.id, { error: 'boom' })
+    expect(db.getMeeting(m.id)?.error).toBe('boom')
     db.closeDb()
     raw(file, (d) => {
       expect(userVersion(d)).toBe(db.MIGRATIONS.length)
@@ -133,6 +137,46 @@ describe('migrations', () => {
       expect(d.prepare(`SELECT name FROM sqlite_master WHERE name = 'half_done'`).all()).toEqual([])
     })
     expect(existsSync(file)).toBe(true)
+  })
+})
+
+describe('meetings', () => {
+  beforeEach(() => db.openDb(':memory:'))
+  const seg = (text: string, source: 'mic' | 'system' | 'manual') => ({ speaker: 'A', tStart: 0, tEnd: 1, text, source })
+
+  it('starts without an error', () => {
+    const p = db.createProject('P', '')
+    expect(db.createMeeting(p.id, 'M', 'ready').error).toBeNull()
+    expect(db.getMeeting(db.listMeetings(p.id)[0].id)?.error).toBeNull()
+  })
+
+  it('replaceSegments swaps the given sources and keeps the others', () => {
+    const p = db.createProject('P', '')
+    const m = db.createMeeting(p.id, 'M', 'ready')
+    db.addSegments(m.id, [seg('old mic', 'mic'), seg('old system', 'system'), seg('pasted note', 'manual')])
+    db.replaceSegments(m.id, ['mic', 'system'], [seg('new mic', 'mic')])
+    expect(db.listSegments(m.id).map((s) => s.text).sort()).toEqual(['new mic', 'pasted note'])
+  })
+
+  it('replaceSegments keeps the old segments if inserting the new ones fails', () => {
+    const p = db.createProject('P', '')
+    const m = db.createMeeting(p.id, 'M', 'ready')
+    db.addSegments(m.id, [seg('old mic', 'mic')])
+    expect(() => db.replaceSegments(m.id, ['mic'], [seg(null as never, 'mic')])).toThrow()
+    expect(db.listSegments(m.id).map((s) => s.text)).toEqual(['old mic'])
+  })
+
+  it('recoverInterruptedMeetings marks meetings cut off by a quit or crash', () => {
+    const p = db.createProject('P', '')
+    const recording = db.createMeeting(p.id, 'A', 'recording')
+    const transcribing = db.createMeeting(p.id, 'B', 'transcribing')
+    const analyzed = db.createMeeting(p.id, 'C', 'analyzed')
+
+    expect(db.recoverInterruptedMeetings().sort()).toEqual([recording.id, transcribing.id].sort())
+
+    expect(db.getMeeting(recording.id)).toMatchObject({ status: 'ready', error: expect.stringMatching(/recording was interrupted/i) })
+    expect(db.getMeeting(transcribing.id)).toMatchObject({ status: 'ready', error: expect.stringMatching(/processing was interrupted/i) })
+    expect(db.getMeeting(analyzed.id)).toMatchObject({ status: 'analyzed', error: null })
   })
 })
 

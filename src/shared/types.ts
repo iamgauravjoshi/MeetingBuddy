@@ -71,6 +71,7 @@ export interface Meeting {
   endedAt: string | null
   status: MeetingStatus
   sourceApp: string
+  error: string | null // why transcription or analysis last failed, or why the meeting was interrupted
 }
 
 export type SegmentSource = 'mic' | 'system' | 'manual'

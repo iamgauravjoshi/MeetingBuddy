@@ -53,6 +53,7 @@ export function MeetingView(props: {
   const [error, setError] = useState<string | null>(null)
   const [mapSpeakers, setMapSpeakers] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [hasAudio, setHasAudio] = useState(false)
   const transcriptRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -66,6 +67,7 @@ export function MeetingView(props: {
     setReport(await api.getReport(props.meetingId))
     setItems(await api.listItems(m.projectId))
     setStakeholders(await api.listStakeholders(m.projectId))
+    setHasAudio(await api.hasRecording(props.meetingId))
   }, [props.meetingId])
   useEffect(() => void load(), [load])
   useEvent('meeting:changed', (id: string) => id === props.meetingId && void load(), [load])
@@ -146,6 +148,16 @@ export function MeetingView(props: {
         </button>
       </div>
       {busy && <div className="banner">{busy}</div>}
+      {meeting.error && meeting.status !== 'transcribing' && !props.live && (
+        <div className="error row">
+          <span className="grow">{meeting.error}</span>
+          {hasAudio && (
+            <button className="btn sm" disabled={!!busy} onClick={() => void run('Starting transcription…', () => api.transcribeRecording(meeting.id))}>
+              Transcribe recording
+            </button>
+          )}
+        </div>
+      )}
       <ErrorBox error={error} />
 
       <div className="meeting-grid">

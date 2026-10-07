@@ -107,6 +107,18 @@ export function App() {
   useEvent('meeting:detected', (d: DetectedMeeting) => !recRef.current && setDetected(d))
   useEvent('meeting:ended', () => void stopRecording('The meeting app released the microphone.'), [stopRecording])
   useEvent('navigate:meeting', (id: string) => setView({ kind: 'meeting', meetingId: id }))
+  // the user chose "Stop recording and quit": save the recording, then let main quit
+  useEvent(
+    'app:quit-requested',
+    async () => {
+      try {
+        await stopRecording('MeetingBuddy is quitting.')
+      } finally {
+        window.mb.quitReady()
+      }
+    },
+    [stopRecording]
+  )
 
   useEffect(() => {
     if (!banner) return

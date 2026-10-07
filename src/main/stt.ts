@@ -5,6 +5,10 @@ export type RawSegment = Omit<Segment, 'id' | 'meetingId' | 'idx'>
 
 const DEFAULT_STT_MODEL = { deepgram: 'nova-3', openai: 'whisper-1', groq: 'whisper-large-v3-turbo' } as const
 
+/** Live-preview chunks (~30 s of audio) and whole recordings get different time limits. */
+export const CHUNK_TIMEOUT_MS = 60_000
+export const FILE_TIMEOUT_MS = 10 * 60_000
+
 /**
  * Transcribes one audio file (webm/opus from MediaRecorder).
  * The mic stream is always the local user; the system stream contains everyone else.
@@ -14,7 +18,26 @@ export async function transcribe(
   audio: Buffer,
   mime: string,
   source: SegmentSource,
-  offsetSec: number
+  offsetSec: number,
+  timeoutMs: number
+): Promise<RawSegment[]> {
+  if (s.sttProvider === 'none') return []
+  const signal = AbortSignal.timeout(timeoutMs)
+  try {
+    return await request(s, audio, mime, source, offsetSec, signal)
+  } catch (e) {
+    if (signal.aborted) throw new Error(`Speech-to-text (${s.sttProvider}) timed out after ${timeoutMs / 1000} s.`)
+    throw e
+  }
+}
+
+async function request(
+  s: Settings,
+  audio: Buffer,
+  mime: string,
+  source: SegmentSource,
+  offsetSec: number,
+  signal: AbortSignal
 ): Promise<RawSegment[]> {
   if (s.sttProvider === 'none') return []
   const key = getSecret(s.sttProvider)
@@ -27,7 +50,8 @@ export async function transcribe(
     const res = await fetch(`https://api.deepgram.com/v1/listen?${params}`, {
       method: 'POST',
       headers: { Authorization: `Token ${key}`, 'Content-Type': mime },
-      body: new Uint8Array(audio)
+      body: new Uint8Array(audio),
+      signal
     })
     if (!res.ok) throw new Error(`Deepgram error ${res.status}: ${await res.text()}`)
     const json = (await res.json()) as { results?: { utterances?: { start: number; end: number; transcript: string; speaker?: number }[] } }
@@ -49,7 +73,7 @@ export async function transcribe(
   form.append('model', model)
   form.append('response_format', 'verbose_json')
   form.append('timestamp_granularities[]', 'segment')
-  const res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form })
+  const res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal })
   if (!res.ok) throw new Error(`${s.sttProvider} transcription error ${res.status}: ${await res.text()}`)
   const json = (await res.json()) as { text?: string; segments?: { start: number; end: number; text: string }[] }
   const segs = json.segments ?? (json.text ? [{ start: 0, end: 0, text: json.text }] : [])

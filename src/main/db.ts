@@ -90,7 +90,9 @@ CREATE INDEX IF NOT EXISTS marks_meeting ON marks(meeting_id);
 CREATE INDEX IF NOT EXISTS reports_meeting ON reports(meeting_id);
 CREATE INDEX IF NOT EXISTS proposals_report ON proposals(report_id);
 CREATE INDEX IF NOT EXISTS state_versions_project ON state_versions(project_id, created_at);
-`
+`,
+  // 3: why a meeting's transcription or analysis failed, or that it was interrupted
+  `ALTER TABLE meetings ADD COLUMN error TEXT;`
 ]
 
 export function openDb(file: string): void {
@@ -168,7 +170,7 @@ const toItem = (r: Row): Item => ({
 })
 const toMeeting = (r: Row): Meeting => ({
   id: r.id, projectId: r.project_id, title: r.title, startedAt: r.started_at, endedAt: r.ended_at,
-  status: r.status, sourceApp: r.source_app
+  status: r.status, sourceApp: r.source_app, error: r.error
 })
 const toSegment = (r: Row): Segment => ({
   id: r.id, meetingId: r.meeting_id, idx: r.idx, speaker: r.speaker, tStart: r.t_start, tEnd: r.t_end,
@@ -282,17 +284,32 @@ export function getMeeting(mid: string): Meeting | null {
   return r ? toMeeting(r) : null
 }
 export function createMeeting(pid: string, title: string, status: MeetingStatus, sourceApp = ''): Meeting {
-  const m: Meeting = { id: id(), projectId: pid, title, startedAt: now(), endedAt: null, status, sourceApp }
+  const m: Meeting = { id: id(), projectId: pid, title, startedAt: now(), endedAt: null, status, sourceApp, error: null }
   db.prepare('INSERT INTO meetings (id, project_id, title, started_at, ended_at, status, source_app) VALUES (?, ?, ?, ?, NULL, ?, ?)').run(
     m.id, pid, title, m.startedAt, status, sourceApp
   )
   return m
 }
-export function updateMeeting(mid: string, patch: Partial<Pick<Meeting, 'title' | 'status' | 'endedAt'>>): void {
+export function updateMeeting(mid: string, patch: Partial<Pick<Meeting, 'title' | 'status' | 'endedAt' | 'error'>>): void {
   const cur = getMeeting(mid)
   if (!cur) return
   const n = { ...cur, ...patch }
-  db.prepare('UPDATE meetings SET title = ?, status = ?, ended_at = ? WHERE id = ?').run(n.title, n.status, n.endedAt, mid)
+  db.prepare('UPDATE meetings SET title = ?, status = ?, ended_at = ?, error = ? WHERE id = ?').run(n.title, n.status, n.endedAt, n.error, mid)
+}
+/**
+ * Startup recovery: meetings left in 'recording' or 'transcribing' were cut off by a quit or crash.
+ * They become 'ready' with an error explaining what happened, so their saved audio can be transcribed on request.
+ */
+export function recoverInterruptedMeetings(): string[] {
+  const rows = db.prepare(`SELECT id, status FROM meetings WHERE status IN ('recording', 'transcribing')`).all() as Row[]
+  const stmt = db.prepare(`UPDATE meetings SET status = 'ready', ended_at = COALESCE(ended_at, ?), error = ? WHERE id = ?`)
+  tx(() => {
+    for (const r of rows) {
+      const what = r.status === 'recording' ? 'The recording was interrupted' : 'Processing was interrupted'
+      stmt.run(now(), `${what} when MeetingBuddy closed. The audio saved so far can be transcribed.`, r.id)
+    }
+  })
+  return rows.map((r) => r.id as string)
 }
 export function deleteMeeting(mid: string): void {
   db.prepare('DELETE FROM meetings WHERE id = ?').run(mid)
@@ -412,4 +429,11 @@ export function recentMeetingSummaries(pid: string, excludeMeetingId: string, li
 export function deleteSegments(mid: string, sources: Segment['source'][]): void {
   const stmt = db.prepare('DELETE FROM segments WHERE meeting_id = ? AND source = ?')
   for (const s of sources) stmt.run(mid, s)
+}
+/** Atomically replaces the segments of the given sources; on failure the old ones stay. */
+export function replaceSegments(mid: string, sources: Segment['source'][], segs: Omit<Segment, 'id' | 'meetingId' | 'idx'>[]): Segment[] {
+  return tx(() => {
+    deleteSegments(mid, sources)
+    return addSegments(mid, segs)
+  })
 }

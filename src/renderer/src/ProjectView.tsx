@@ -315,6 +315,7 @@ function Meetings({ projectId, onOpen }: { projectId: string; onOpen: (id: strin
                 <div className="item-title">{m.title}</div>
                 <div className="muted small">{fmtDate(m.startedAt)}{m.sourceApp && m.sourceApp !== 'import' ? ` · ${m.sourceApp}` : ''}</div>
               </div>
+              {m.error && <span className="badge red" title={m.error}>Needs attention</span>}
               <span className={`badge ${color}`}>{label}</span>
             </div>
           )

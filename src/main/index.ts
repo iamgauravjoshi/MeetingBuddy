@@ -1,6 +1,6 @@
-import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, Menu, nativeImage, Notification, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, session, shell, Tray } from 'electron'
 import { join } from 'node:path'
-import { openDb } from './db'
+import { openDb, recoverInterruptedMeetings } from './db'
 import { api, broadcast, removeOrphanedAudio, setShowMainWindow } from './api'
 import { MeetingDetector } from './detector'
 import { getSettings } from './settings'
@@ -9,6 +9,7 @@ import type { DetectedMeeting, RecordingState } from '@shared/types'
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
+let quitPrompted = false
 let recording: RecordingState = { active: false, meetingId: null, projectId: null, startedAt: null }
 const detector = new MeetingDetector()
 
@@ -87,13 +88,8 @@ function refreshTray(): void {
         }
       },
       { type: 'separator' },
-      {
-        label: 'Quit',
-        click: () => {
-          quitting = true
-          app.quit()
-        }
-      }
+      // before-quit asks first if a recording is running
+      { label: 'Quit', click: () => app.quit() }
     ])
   )
 }
@@ -144,11 +140,44 @@ detector.on('end', () => {
   if (recording.active) broadcast('meeting:ended')
 })
 
+function quitNow(): void {
+  quitting = true
+  app.quit()
+}
+
+/** Quitting mid-recording would lose the end of it, so ask first; on yes, the renderer saves the recording, then quits. */
+async function confirmQuitWhileRecording(): Promise<void> {
+  if (quitPrompted) return
+  quitPrompted = true
+  showWindow()
+  const options: Electron.MessageBoxOptions = {
+    type: 'question',
+    buttons: ['Stop recording and quit', 'Keep recording'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    title: 'MeetingBuddy',
+    message: 'Stop recording and quit?',
+    detail:
+      'The audio recorded so far is saved. Transcription will not finish before MeetingBuddy closes; you can transcribe the recording from its meeting page next time.'
+  }
+  const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
+  if (response !== 0) {
+    quitPrompted = false
+    return
+  }
+  broadcast('app:quit-requested')
+  // don't hang on a renderer that can't answer; the audio is already on disk up to the last few seconds
+  setTimeout(quitNow, 15_000)
+}
+
 app.on('second-instance', showWindow)
 
 app.whenReady().then(() => {
   app.setAppUserModelId('com.meetingbuddy.app')
   openDb(join(app.getPath('userData'), 'meetingbuddy.db'))
+  // meetings cut off by a quit or crash: mark them so their saved audio can be transcribed on request
+  recoverInterruptedMeetings()
   try {
     removeOrphanedAudio()
   } catch (e) {
@@ -163,6 +192,7 @@ app.whenReady().then(() => {
     recording = s
     refreshTray()
   })
+  ipcMain.on('app:quit-ready', quitNow)
   ipcMain.handle('app:applyHotkeys', () => {
     registerHotkeys()
     refreshTray()
@@ -189,7 +219,12 @@ app.whenReady().then(() => {
   applyDetector()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
+  if (recording.active && !quitting) {
+    e.preventDefault()
+    void confirmQuitWhileRecording()
+    return
+  }
   quitting = true
 })
 app.on('will-quit', () => {

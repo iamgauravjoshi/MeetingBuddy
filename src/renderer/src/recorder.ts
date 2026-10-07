@@ -8,15 +8,16 @@ interface Track {
   source: Source
   stream: MediaStream
   full: MediaRecorder
-  fullChunks: Blob[]
+  writes: Promise<void> // appends to the stream's file on disk, one after another
   chunkRec: MediaRecorder | null
   chunkStart: number
 }
 
 /**
  * Captures the microphone (you) and system loopback audio (everyone else) as separate streams.
- * Each stream gets a continuous recording (for the final, consistent transcription) and, optionally,
- * a rolling chunk recorder whose chunks are transcribed live for the side panel.
+ * Each stream gets a continuous recording (for the final, consistent transcription), written to disk every
+ * few seconds so a crash or forced quit loses almost nothing, and, optionally, a rolling chunk recorder whose
+ * chunks are transcribed live for the side panel.
  */
 export class MeetingRecorder {
   private tracks: Track[] = []
@@ -57,8 +58,13 @@ export class MeetingRecorder {
     for (const [source, stream] of [['mic', mic], ['system', system]] as const) {
       if (!stream) continue
       const full = new MediaRecorder(stream, { mimeType: MIME, audioBitsPerSecond: BITRATE })
-      const t: Track = { source, stream, full, fullChunks: [], chunkRec: null, chunkStart: 0 }
-      full.ondataavailable = (e) => e.data.size && t.fullChunks.push(e.data)
+      const t: Track = { source, stream, full, writes: Promise.resolve(), chunkRec: null, chunkStart: 0 }
+      full.ondataavailable = (e) => {
+        if (!e.data.size) return
+        t.writes = t.writes
+          .then(async () => api.appendRecordingChunk(this.meetingId, source, new Uint8Array(await e.data.arrayBuffer())))
+          .catch((err) => this.onError(`Saving ${source} audio failed: ${(err as Error).message}`))
+      }
       full.start(5000)
       this.tracks.push(t)
       if (this.chunkSeconds > 0) this.startChunk(t)
@@ -96,22 +102,15 @@ export class MeetingRecorder {
     this.stopping = true
     if (this.timer) window.clearInterval(this.timer)
     await Promise.all(
-      this.tracks.map(
-        (t) =>
-          new Promise<void>((resolve) => {
-            t.chunkRec?.stop()
-            t.full.onstop = async () => {
-              try {
-                const blob = new Blob(t.fullChunks, { type: MIME })
-                await api.saveRecordingFile(this.meetingId, t.source, new Uint8Array(await blob.arrayBuffer()))
-              } catch (e) {
-                this.onError(`Saving ${t.source} audio failed: ${(e as Error).message}`)
-              }
-              resolve()
-            }
-            t.full.stop()
-          })
-      )
+      this.tracks.map(async (t) => {
+        t.chunkRec?.stop()
+        // the last ondataavailable fires before onstop, so its write is queued by the time this resolves
+        await new Promise<void>((resolve) => {
+          t.full.onstop = () => resolve()
+          t.full.stop()
+        })
+        await t.writes
+      })
     )
     this.tracks.forEach((t) => t.stream.getTracks().forEach((tr) => tr.stop()))
     this.tracks = []

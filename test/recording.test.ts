@@ -1,0 +1,146 @@
+import { readFileSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SegmentSource } from '@shared/types'
+
+const userData = vi.hoisted(() => {
+  const { mkdtempSync } = require('node:fs') as typeof import('node:fs')
+  const { tmpdir } = require('node:os') as typeof import('node:os')
+  const { join } = require('node:path') as typeof import('node:path')
+  return mkdtempSync(join(tmpdir(), 'mb-recording-'))
+})
+const settings = vi.hoisted(() => ({ sttProvider: 'deepgram', selfName: 'Me' }) as Record<string, unknown>)
+const transcribe = vi.hoisted(() => vi.fn())
+const analyzeMeeting = vi.hoisted(() => vi.fn(async () => null))
+
+vi.mock('electron', () => ({
+  app: { getPath: () => userData },
+  BrowserWindow: { getAllWindows: () => [] },
+  Notification: { isSupported: () => false },
+  dialog: {}
+}))
+vi.mock('../src/main/settings', () => ({ getSettings: () => settings }))
+vi.mock('../src/main/llm', () => ({}))
+vi.mock('../src/main/analysis', () => ({ analyzeMeeting, applyApproved: vi.fn() }))
+// real mergeStreams, scripted speech-to-text
+vi.mock('../src/main/stt', async (importOriginal) => ({ ...(await importOriginal<typeof import('../src/main/stt')>()), transcribe }))
+
+import * as db from '../src/main/db'
+import { api } from '../src/main/api'
+import { CHUNK_TIMEOUT_MS, FILE_TIMEOUT_MS } from '../src/main/stt'
+
+const bytes = (s: string): Uint8Array => new Uint8Array(Buffer.from(s))
+const said = (text: string, source: SegmentSource, t = 0) => ({ speaker: source === 'mic' ? 'Me' : 'Speaker 1', tStart: t, tEnd: t + 2, text, source })
+const texts = (meetingId: string): string[] => db.listSegments(meetingId).map((s) => s.text)
+const settled = (meetingId: string) => vi.waitFor(() => expect(db.getMeeting(meetingId)?.status).toBe('ready'))
+
+let projectId = ''
+beforeAll(() => {
+  db.openDb(':memory:')
+  projectId = db.createProject('P', '').id
+})
+afterAll(() => rmSync(userData, { recursive: true, force: true }))
+beforeEach(() => {
+  transcribe.mockReset()
+  analyzeMeeting.mockReset()
+  analyzeMeeting.mockResolvedValue(null)
+  settings.sttProvider = 'deepgram'
+})
+
+describe('recording to disk', () => {
+  it('appends audio chunks to the stream file in order', () => {
+    const m = api.startRecording(projectId, 'T', '')
+    api.appendRecordingChunk(m.id, 'mic', bytes('ab'))
+    api.appendRecordingChunk(m.id, 'mic', bytes('cd'))
+    expect(readFileSync(join(userData, 'audio', m.id, 'mic.webm'), 'utf8')).toBe('abcd')
+  })
+  it('refuses ids that are not meeting UUIDs', () => {
+    expect(() => api.appendRecordingChunk('..', 'mic', bytes('x'))).toThrow()
+  })
+  it('reports whether a meeting has recorded audio', () => {
+    const m = api.startRecording(projectId, 'T', '')
+    expect(api.hasRecording(m.id)).toBe(false)
+    api.appendRecordingChunk(m.id, 'system', bytes('x'))
+    expect(api.hasRecording(m.id)).toBe(true)
+  })
+})
+
+describe('live chunks', () => {
+  it('uses the chunk timeout for live transcription', async () => {
+    const m = api.startRecording(projectId, 'T', '')
+    transcribe.mockResolvedValueOnce([])
+    await api.recordingChunk(m.id, 'mic', 30, bytes('x'))
+    expect(transcribe).toHaveBeenCalledWith(settings, expect.anything(), 'audio/webm', 'mic', 30, CHUNK_TIMEOUT_MS)
+  })
+  it('drops a chunk whose transcription finishes after recording stopped', async () => {
+    const m = api.startRecording(projectId, 'T', '')
+    let finish!: (v: unknown) => void
+    transcribe.mockImplementationOnce(() => new Promise((r) => (finish = r)))
+    const pending = api.recordingChunk(m.id, 'mic', 30, bytes('x'))
+    api.stopRecording(m.id)
+    finish([said('late words from the chunk', 'mic', 30)])
+    expect(await pending).toEqual([])
+    await settled(m.id)
+    expect(texts(m.id)).not.toContain('late words from the chunk')
+  })
+})
+
+describe('finishing a meeting', () => {
+  // a recording with both streams on disk and a live transcript for each
+  const recorded = async (): Promise<string> => {
+    const m = api.startRecording(projectId, 'T', '')
+    api.appendRecordingChunk(m.id, 'mic', bytes('m'))
+    api.appendRecordingChunk(m.id, 'system', bytes('s'))
+    transcribe.mockResolvedValueOnce([said('chunk mic alpha bravo', 'mic')]).mockResolvedValueOnce([said('chunk system charlie delta', 'system')])
+    await api.recordingChunk(m.id, 'mic', 0, bytes('x'))
+    await api.recordingChunk(m.id, 'system', 0, bytes('y'))
+    return m.id
+  }
+
+  it('replaces the live transcript with the full-file transcript', async () => {
+    const id = await recorded()
+    transcribe.mockResolvedValueOnce([said('final mic echo foxtrot', 'mic')]).mockResolvedValueOnce([said('final system golf hotel', 'system')])
+    api.stopRecording(id)
+    await settled(id)
+    expect(texts(id).sort()).toEqual(['final mic echo foxtrot', 'final system golf hotel'])
+    expect(db.getMeeting(id)?.error).toBeNull()
+    expect(transcribe).toHaveBeenLastCalledWith(settings, expect.anything(), 'audio/webm', 'system', 0, FILE_TIMEOUT_MS)
+  })
+
+  it('keeps the live transcript of a stream whose full transcription failed', async () => {
+    const id = await recorded()
+    transcribe.mockResolvedValueOnce([said('final mic echo foxtrot', 'mic')]).mockRejectedValueOnce(new Error('Deepgram error 500'))
+    api.stopRecording(id)
+    await settled(id)
+    expect(texts(id).sort()).toEqual(['chunk system charlie delta', 'final mic echo foxtrot'])
+    expect(db.getMeeting(id)?.error).toMatch(/system.*Deepgram error 500/)
+  })
+
+  it('records an analysis failure on the meeting', async () => {
+    const id = await recorded()
+    transcribe.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    analyzeMeeting.mockRejectedValueOnce(new Error('No API key saved'))
+    api.stopRecording(id)
+    await vi.waitFor(() => expect(db.getMeeting(id)?.error).toMatch(/No API key saved/))
+    expect(db.getMeeting(id)?.status).toBe('ready')
+  })
+})
+
+describe('transcribing a recovered recording', () => {
+  it('runs the full pipeline on the saved audio and clears the error', async () => {
+    const m = db.createMeeting(projectId, 'Interrupted', 'ready')
+    db.updateMeeting(m.id, { error: 'Recording was interrupted.' })
+    api.appendRecordingChunk(m.id, 'mic', bytes('m'))
+    transcribe.mockResolvedValueOnce([said('recovered words from disk', 'mic')])
+    api.transcribeRecording(m.id)
+    expect(db.getMeeting(m.id)?.status).toBe('transcribing')
+    await settled(m.id)
+    expect(texts(m.id)).toEqual(['recovered words from disk'])
+    expect(db.getMeeting(m.id)?.error).toBeNull()
+  })
+  it('needs a speech-to-text provider', () => {
+    settings.sttProvider = 'none'
+    const m = db.createMeeting(projectId, 'X', 'ready')
+    expect(() => api.transcribeRecording(m.id)).toThrow(/speech-to-text/)
+  })
+})

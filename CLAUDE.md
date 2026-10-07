@@ -50,15 +50,20 @@ There is no linter configured.
    - `getDisplayMedia` provides system loopback audio, which is everyone else. Main's `setDisplayMediaRequestHandler` in `index.ts` answers it with `audio: 'loopback'`, and the video track is discarded.
    - The main window uses `backgroundThrottling: false` so recording continues while the window is hidden in the tray.
 2. **Each stream gets two MediaRecorders:**
-   - A continuous one, saved via `saveRecordingFile` on stop.
-   - A rolling chunk recorder, every `chunkSeconds`. Its chunks go through `recordingChunk` for the live transcript preview.
+   - A continuous one. Every 5 s its data is appended to `<source>.webm` on disk via `appendRecordingChunk`, through a per-stream promise queue that keeps writes in order. `stop()` waits for that queue, so a crash loses only the last few seconds.
+   - A rolling chunk recorder, every `chunkSeconds`. Its chunks go through `recordingChunk` for the live transcript preview. `recordingChunk` drops any result that arrives after the meeting has left `recording`.
 3. **On stop**, `api.stopRecording` calls `finishMeeting`, which:
-   - re-transcribes the **full** files,
-   - **replaces** the chunked `mic`/`system` segments,
+   - re-transcribes the **full** files with `Promise.allSettled`. A stream that fails, or returns nothing, keeps its live-preview segments.
    - runs `mergeStreams` to drop mic echo of speaker audio,
+   - **replaces** the `mic`/`system` segments atomically with `db.replaceSegments`,
+   - saves any failure in `meetings.error` (shown on the meeting page),
    - then auto-runs `analyzeMeeting` and shows a notification.
 
-   The full-file pass exists because diarization speaker numbers are not consistent across independent chunks.
+   The full-file pass exists because diarization speaker numbers are not consistent across independent chunks. Speech-to-text requests time out after `CHUNK_TIMEOUT_MS` (60 s) for chunks and `FILE_TIMEOUT_MS` (10 min) for full files.
+
+   **Interruptions:**
+   - Quitting while recording shows a "Stop recording and quit?" dialog (`before-quit` in `index.ts`). On yes, main sends `app:quit-requested`; the renderer stops and saves the recording, then calls `window.mb.quitReady()`. A 15 s fallback timer quits anyway if the renderer doesn't answer.
+   - At startup, `db.recoverInterruptedMeetings` moves meetings stuck in `recording`/`transcribing` to `ready` with an error. The meeting page then offers **Transcribe recording** (`api.transcribeRecording`); it is never started automatically.
 
 4. **Meeting detection** lives in `detector.ts`. It polls the Windows `CapabilityAccessManager\ConsentStore\microphone` registry: an app is using the mic when `LastUsedTimeStop == 0`.
    - It emits `start` and `end` events.

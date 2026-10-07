@@ -25,7 +25,7 @@ import { api, removeOrphanedAudio } from '../src/main/api'
 const audio = (meetingId: string): string => join(userData, 'audio', meetingId)
 const record = (projectId: string, title: string): string => {
   const m = api.startRecording(projectId, title, '')
-  api.saveRecordingFile(m.id, 'mic', new Uint8Array([1, 2, 3]))
+  api.appendRecordingChunk(m.id, 'mic', new Uint8Array([1, 2, 3]))
   return m.id
 }
 
@@ -72,6 +72,6 @@ describe('deleting meetings removes their audio', () => {
   })
 
   it('refuses to write recordings for ids that are not meeting UUIDs', () => {
-    expect(() => api.saveRecordingFile('..', 'mic', new Uint8Array([1]))).toThrow()
+    expect(() => api.appendRecordingChunk('..', 'mic', new Uint8Array([1]))).toThrow()
   })
 })

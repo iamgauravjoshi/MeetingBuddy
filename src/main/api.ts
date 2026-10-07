@@ -1,11 +1,11 @@
 import { app, BrowserWindow, dialog, Notification } from 'electron'
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Item, LlmProvider, Proposal, Settings, Stakeholder, SttProvider } from '@shared/types'
 import * as db from './db'
 import { analyzeMeeting, applyApproved } from './analysis'
 import { getSettings, saveSettings, setSecret } from './settings'
-import { mergeStreams, transcribe } from './stt'
+import { CHUNK_TIMEOUT_MS, FILE_TIMEOUT_MS, mergeStreams, transcribe } from './stt'
 import { parseTranscript } from './transcriptParser'
 import { getModel } from './llm'
 import { deleteMeetingAudio, meetingAudioDir, sweepOrphanedAudio } from './audio'
@@ -41,30 +41,45 @@ export function setShowMainWindow(fn: () => void): void {
   showMainWindow = fn
 }
 
+const STREAMS = ['mic', 'system'] as const
+type Stream = (typeof STREAMS)[number]
+const streamFile = (meetingId: string, source: Stream): string => join(audioDir(meetingId), `${source}.webm`)
+const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+
+/**
+ * Final transcription of the full recordings. Each stream that transcribes replaces its live (chunked)
+ * preview; a stream that fails, or returns nothing, keeps its preview. Returns the failures.
+ */
+async function transcribeRecordings(s: Settings, meetingId: string): Promise<string[]> {
+  const files = STREAMS.map((src) => (existsSync(streamFile(meetingId, src)) ? readFileSync(streamFile(meetingId, src)) : null))
+  const results = await Promise.allSettled(
+    STREAMS.map((src, i) => (files[i] ? transcribe(s, files[i], 'audio/webm', src, 0, FILE_TIMEOUT_MS) : Promise.resolve([])))
+  )
+  const preview = db.listSegments(meetingId)
+  const errors: string[] = []
+  const [mic, sys] = STREAMS.map((src, i) => {
+    const r = results[i]
+    if (r.status === 'rejected') errors.push(`${src === 'mic' ? 'Microphone' : 'system'} audio: ${errText(r.reason)}`)
+    if (r.status === 'fulfilled' && r.value.length) return r.value
+    return preview.filter((g) => g.source === src).map(({ speaker, tStart, tEnd, text, source }) => ({ speaker, tStart, tEnd, text, source }))
+  })
+  db.replaceSegments(meetingId, [...STREAMS], mergeStreams(mic, sys))
+  return errors
+}
+
 /** After a meeting: final transcription of the full recordings, then automatic impact analysis. */
 async function finishMeeting(meetingId: string): Promise<void> {
   const s = getSettings()
-  const dir = audioDir(meetingId)
+  let errors: string[] = []
   try {
     if (s.sttProvider !== 'none') {
-      db.updateMeeting(meetingId, { status: 'transcribing' })
+      db.updateMeeting(meetingId, { status: 'transcribing', error: null })
       broadcast('meeting:changed', meetingId)
-      const read = (f: string): Buffer | null => (existsSync(join(dir, f)) ? readFileSync(join(dir, f)) : null)
-      const micBuf = read('mic.webm')
-      const sysBuf = read('system.webm')
-      const [mic, sys] = await Promise.all([
-        micBuf ? transcribe(s, micBuf, 'audio/webm', 'mic', 0) : Promise.resolve([]),
-        sysBuf ? transcribe(s, sysBuf, 'audio/webm', 'system', 0) : Promise.resolve([])
-      ])
-      const merged = mergeStreams(mic, sys)
-      if (merged.length) {
-        // the full-file pass replaces the live (chunked) preview segments
-        db.tx(() => db.deleteSegments(meetingId, ['mic', 'system']))
-        db.addSegments(meetingId, merged)
-      }
+      errors = await transcribeRecordings(s, meetingId)
     }
-    db.updateMeeting(meetingId, { status: 'ready' })
+    db.updateMeeting(meetingId, { status: 'ready', error: errors.length ? `Transcription failed for ${errors.join('; ')}` : null })
     broadcast('meeting:changed', meetingId)
+    if (errors.length) notify('MeetingBuddy: transcription incomplete', errors.join('\n'), showMainWindow)
 
     if (db.listSegments(meetingId).length === 0) {
       notify('MeetingBuddy', 'Recording saved, but no transcript was produced. Paste or upload one in the meeting page.', showMainWindow)
@@ -83,8 +98,10 @@ async function finishMeeting(meetingId: string): Promise<void> {
       }
     )
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (db.getMeeting(meetingId)?.status === 'transcribing') db.updateMeeting(meetingId, { status: 'ready' })
+    const msg = errText(e)
+    const prior = errors.length ? `Transcription failed for ${errors.join('; ')}. ` : ''
+    const stuck = db.getMeeting(meetingId)?.status === 'transcribing'
+    db.updateMeeting(meetingId, { ...(stuck && { status: 'ready' as const }), error: `${prior}Processing failed: ${msg}` })
     broadcast('meeting:changed', meetingId)
     notify('MeetingBuddy: processing failed', msg, showMainWindow)
   }
@@ -173,7 +190,7 @@ export const api = {
     const p = r.filePaths[0]
     const ext = p.split('.').pop()!.toLowerCase()
     const mime = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', webm: 'audio/webm', ogg: 'audio/ogg', mp4: 'video/mp4', mkv: 'video/x-matroska' }[ext] ?? 'application/octet-stream'
-    const segs = await transcribe(s, readFileSync(p), mime, 'system', 0)
+    const segs = await transcribe(s, readFileSync(p), mime, 'system', 0, FILE_TIMEOUT_MS)
     if (segs.length === 0) throw new Error('No speech was found in that file.')
     const m = db.createMeeting(projectId, p.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, ''), 'ready', 'import')
     db.addSegments(m.id, segs)
@@ -188,17 +205,29 @@ export const api = {
     return m
   },
   /** Live preview: transcribe a ~30 s chunk and append it to the transcript. */
-  recordingChunk: async (meetingId: string, source: 'mic' | 'system', offsetSec: number, data: Uint8Array) => {
+  recordingChunk: async (meetingId: string, source: Stream, offsetSec: number, data: Uint8Array) => {
     const s = getSettings()
     if (s.sttProvider === 'none') return []
-    const segs = await transcribe(s, Buffer.from(data), 'audio/webm', source, offsetSec)
-    if (segs.length === 0) return []
+    const segs = await transcribe(s, Buffer.from(data), 'audio/webm', source, offsetSec, CHUNK_TIMEOUT_MS)
+    // once recording stops, the full-file pass owns the transcript; a chunk that finishes later is dropped
+    if (segs.length === 0 || db.getMeeting(meetingId)?.status !== 'recording') return []
     const added = db.addSegments(meetingId, segs)
     broadcast('transcript:appended', meetingId, added)
     return added
   },
-  saveRecordingFile: (meetingId: string, source: 'mic' | 'system', data: Uint8Array) => {
-    writeFileSync(join(audioDir(meetingId), `${source}.webm`), Buffer.from(data))
+  /** Appends a few seconds of recorded audio to the stream's file, so a crash loses at most that much. */
+  appendRecordingChunk: (meetingId: string, source: Stream, data: Uint8Array) => {
+    if (!STREAMS.includes(source)) throw new Error(`Unknown audio source: ${source}`)
+    mkdirSync(audioDir(meetingId), { recursive: true })
+    appendFileSync(streamFile(meetingId, source), Buffer.from(data))
+  },
+  hasRecording: (meetingId: string): boolean =>
+    STREAMS.some((src) => existsSync(streamFile(meetingId, src)) && statSync(streamFile(meetingId, src)).size > 0),
+  /** Transcribes and analyzes saved audio again, e.g. after an interrupted recording or a failed transcription. */
+  transcribeRecording: (meetingId: string) => {
+    if (getSettings().sttProvider === 'none') throw new Error('Choose a speech-to-text provider in Settings first.')
+    db.updateMeeting(meetingId, { status: 'transcribing', error: null })
+    void finishMeeting(meetingId)
   },
   addMark: (meetingId: string, t: number, kind: string) => db.addMark(meetingId, t, kind),
   stopRecording: (meetingId: string) => {

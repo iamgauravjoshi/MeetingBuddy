@@ -1,9 +1,11 @@
 import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, session, shell, Tray } from 'electron'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { openDb, recoverInterruptedMeetings } from './db'
 import { api, broadcast, removeOrphanedAudio, setShowMainWindow } from './api'
 import { MeetingDetector } from './detector'
 import { getSettings } from './settings'
+import { isSafeExternalUrl, isTrustedAppUrl, parseApiArgs, RECORDING_STATE } from './ipc'
 import type { DetectedMeeting, RecordingState } from '@shared/types'
 
 let win: BrowserWindow | null = null
@@ -12,8 +14,13 @@ let quitting = false
 let quitPrompted = false
 let recording: RecordingState = { active: false, meetingId: null, projectId: null, startedAt: null }
 const detector = new MeetingDetector()
+// the only page this app loads; IPC, navigation, capture and permissions are limited to it
+const appUrl = process.env.ELECTRON_RENDERER_URL ?? pathToFileURL(join(__dirname, '../renderer/index.html')).href
+const fromApp = (frame: Electron.WebFrameMain | null | undefined): boolean => !!frame && isTrustedAppUrl(frame.url, appUrl)
 
-if (!app.requestSingleInstanceLock()) app.quit()
+// a second copy just focuses the first one (see 'second-instance') and must not open the database or a tray icon
+const isPrimaryInstance = app.requestSingleInstanceLock()
+if (!isPrimaryInstance) app.quit()
 
 function showWindow(): void {
   if (!win) return
@@ -34,7 +41,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       // recording runs in this window, so it must keep running while hidden in the tray
       backgroundThrottling: false
@@ -48,9 +55,13 @@ function createWindow(): void {
       win?.hide()
     }
   })
+  // links open in the browser, but only web links: other schemes can start programs or open local files
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (isSafeExternalUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!isTrustedAppUrl(url, appUrl)) e.preventDefault()
   })
   if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
@@ -174,6 +185,7 @@ async function confirmQuitWhileRecording(): Promise<void> {
 app.on('second-instance', showWindow)
 
 app.whenReady().then(() => {
+  if (!isPrimaryInstance) return
   app.setAppUserModelId('com.meetingbuddy.app')
   openDb(join(app.getPath('userData'), 'meetingbuddy.db'))
   // meetings cut off by a quit or crash: mark them so their saved audio can be transcribed on request
@@ -185,27 +197,42 @@ app.whenReady().then(() => {
   }
   setShowMainWindow(showWindow)
 
+  // every api call is checked: it must come from the app's page, and its arguments must match the function's schema
   for (const [name, fn] of Object.entries(api)) {
-    ipcMain.handle(`api:${name}`, (_e, ...args: unknown[]) => (fn as (...a: unknown[]) => unknown)(...args))
+    ipcMain.handle(`api:${name}`, (e, ...args: unknown[]) => {
+      if (!fromApp(e.senderFrame)) throw new Error(`Blocked api:${name} from an untrusted page`)
+      return (fn as (...a: unknown[]) => unknown)(...parseApiArgs(name, args))
+    })
   }
-  ipcMain.on('recording:state', (_e, s: RecordingState) => {
-    recording = s
+  ipcMain.on('recording:state', (e, s: unknown) => {
+    const state = RECORDING_STATE.safeParse(s)
+    if (!fromApp(e.senderFrame) || !state.success) return
+    recording = state.data
     refreshTray()
   })
-  ipcMain.on('app:quit-ready', quitNow)
-  ipcMain.handle('app:applyHotkeys', () => {
+  ipcMain.on('app:quit-ready', (e) => {
+    if (fromApp(e.senderFrame)) quitNow()
+  })
+  ipcMain.handle('app:applyHotkeys', (e) => {
+    if (!fromApp(e.senderFrame)) throw new Error('Blocked app:applyHotkeys from an untrusted page')
     registerHotkeys()
     refreshTray()
     applyDetector()
   })
 
+  // the app needs the microphone (and screen capture for system audio); nothing else, and only for its own page
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
+    callback(['media', 'display-capture'].includes(permission) && isTrustedAppUrl(wc.getURL(), appUrl))
+  })
+
   // System-audio capture: getDisplayMedia() in the renderer gets the screen's loopback audio
   // (everything the speakers play: Zoom, Teams, Meet, Slack...). The video track is discarded.
   session.defaultSession.setDisplayMediaRequestHandler(
-    (_req, callback) => {
+    (req, callback) => {
+      if (!fromApp(req.frame)) return callback({})
       desktopCapturer
         .getSources({ types: ['screen'] })
-        .then((sources) => callback({ video: sources[0], audio: 'loopback' }))
+        .then((sources) => (sources[0] ? callback({ video: sources[0], audio: 'loopback' }) : callback({})))
         .catch(() => callback({}))
     },
     { useSystemPicker: false }

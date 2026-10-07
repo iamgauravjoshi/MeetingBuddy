@@ -40,7 +40,12 @@ There is no linter configured.
 - `src/main/api.ts` exports a single `api` object. `index.ts` registers every key as an IPC handler on channel `api:<name>`.
 - The preload (`src/preload/index.ts`) exposes `window.mb.invoke(name, ...args)` plus an allow-listed `on(channel)` for main→renderer events.
 - `src/renderer/src/api.ts` is a `Proxy` typed as `Remote<typeof api>`. Renderer calls like `api.listItems(id)` are therefore fully typed against main's implementation.
-- **To add a backend capability, add a function to `api` in `api.ts`. No other wiring is needed.**
+- **To add a backend capability, add a function to `api` in `api.ts` and a zod schema for its arguments to `API_ARGS` in `ipc.ts`.** A missing or mismatched schema is a compile error, because `API_ARGS` `satisfies` the parameter types of `Api`.
+- **IPC is treated as untrusted** (`index.ts`):
+  - Every `api:*` call must come from the app's own page (`isTrustedAppUrl`: the dev server origin, or the bundled `renderer/index.html`), and its arguments are checked with `parseApiArgs` before the function runs. IDs must be UUIDs.
+  - The `recording:state`, `app:quit-ready` and `app:applyHotkeys` channels check their sender too.
+  - The window runs with `sandbox: true` and `contextIsolation`. Navigation away from the app is blocked, and only `http(s)` links open externally (`isSafeExternalUrl`).
+  - Only the app's page gets the `media`/`display-capture` permissions and system-audio capture.
 - To add a new main→renderer event, add it to `EVENTS` in the preload and send it with `broadcast()` from `api.ts`.
 
 ### Recording pipeline (spans renderer and main)
@@ -126,6 +131,8 @@ There is no linter configured.
   - At startup, `removeOrphanedAudio` deletes UUID folders that have no meeting row.
 - `settings.ts` stores `settings.json` and `secrets.json` in userData.
   - API keys are encrypted with Electron `safeStorage` and never returned to the renderer. The renderer only sees `settings.hasKey`.
+  - Both files are written atomically (a temp file, then a rename).
+  - On read, unknown keys are dropped, and values that fail `SETTINGS_FIELDS` in `ipc.ts` fall back to their defaults. For example, `chunkSeconds` must be 0 or 10–120.
   - LLM and STT keys share one secrets map, keyed by provider id.
 - `llm.ts` builds the model from settings. OpenRouter, Ollama and custom endpoints all go through `@ai-sdk/openai-compatible`.
 - `stt.ts` calls Deepgram REST directly (with `diarize` only for the system stream) or an OpenAI-compatible `/audio/transcriptions` endpoint (OpenAI/Groq, without diarization).

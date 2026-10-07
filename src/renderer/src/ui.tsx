@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import type { MainEvents } from '@shared/types'
 import { errMsg } from './api'
 
 /**
@@ -50,6 +51,23 @@ export function Modal({ title, onClose, children, footer }: { title: string; onC
   )
 }
 
+/**
+ * Props that make a clickable card, row or quote work like a button for keyboard and screen-reader users:
+ * it can be tabbed to, is announced as a button, and Enter or Space activates it.
+ */
+export function clickable(onActivate: () => void) {
+  return {
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: onActivate,
+    onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return
+      e.preventDefault() // Space would otherwise scroll the page
+      onActivate()
+    }
+  }
+}
+
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="field">
@@ -63,13 +81,7 @@ export function ErrorBox({ error }: { error: string | null }) {
   return error ? <div className="error">{error}</div> : null
 }
 
-export const fmtTime = (sec: number): string => {
-  const s = Math.max(0, Math.floor(sec))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const pad = (n: number): string => String(n).padStart(2, '0')
-  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`
-}
+export { fmtTime } from '@shared/format'
 
 export const fmtDate = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -86,6 +98,6 @@ export function useTick(ms: number, enabled = true): number {
 }
 
 /** Subscribes to a main-process event for the lifetime of the component. */
-export function useEvent(channel: string, cb: (...args: any[]) => void, deps: unknown[] = []): void {
+export function useEvent<K extends keyof MainEvents>(channel: K, cb: (...args: MainEvents[K]) => void, deps: unknown[] = []): void {
   useEffect(() => window.mb.on(channel, cb), deps) // eslint-disable-line react-hooks/exhaustive-deps
 }

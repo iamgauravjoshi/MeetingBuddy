@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, Notification } from 'electron'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Item, LlmProvider, Proposal, Settings, Stakeholder, SttProvider } from '@shared/types'
+import type { Item, LlmProvider, MainEvents, Proposal, Settings, Stakeholder, SttProvider } from '@shared/types'
 import * as db from './db'
 import { analyzeMeeting, applyApproved } from './analysis'
 import { getSettings, saveSettings, setSecret } from './settings'
@@ -25,7 +25,7 @@ function deleteMeeting(meetingId: string): void {
 }
 
 /** Sends an event to every renderer window. */
-export function broadcast(channel: string, ...args: unknown[]): void {
+export function broadcast<K extends keyof MainEvents>(channel: K, ...args: MainEvents[K]): void {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send(channel, ...args)
 }
 

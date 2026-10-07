@@ -12,7 +12,7 @@ import {
   type StateVersion
 } from '@shared/types'
 import { api } from './api'
-import { ErrorBox, Field, fmtDate, Modal, useAction, useEvent } from './ui'
+import { clickable, ErrorBox, Field, fmtDate, Modal, useAction, useEvent } from './ui'
 
 const STATUS_BADGE: Record<ItemStatus, string> = { open: 'blue', done: 'green', superseded: 'amber', cancelled: 'red' }
 const MEETING_STATUS: Record<Meeting['status'], [string, string]> = {
@@ -160,7 +160,7 @@ function Board({ projectId }: { projectId: string }) {
                 <button className="btn ghost sm" onClick={() => setEdit({ type: t, projectId })}>+ Add</button>
               </div>
               {list.map((i) => (
-                <div key={i.id} className={`item-card ${i.status !== 'open' ? 'dim' : ''}`} onClick={() => setEdit(i)}>
+                <div key={i.id} className={`item-card ${i.status !== 'open' ? 'dim' : ''}`} {...clickable(() => setEdit(i))}>
                   <div className="item-title">{i.title}</div>
                   <div className="row small muted" style={{ marginTop: 4 }}>
                     {i.status !== 'open' && <span className={`badge ${STATUS_BADGE[i.status]}`}>{i.status}</span>}
@@ -321,7 +321,7 @@ function Meetings({ projectId, onOpen }: { projectId: string; onOpen: (id: strin
         {meetings.map((m) => {
           const [label, color] = MEETING_STATUS[m.status]
           return (
-            <div key={m.id} className="list-row" onClick={() => onOpen(m.id)}>
+            <div key={m.id} className="list-row" {...clickable(() => onOpen(m.id))}>
               <div className="grow">
                 <div className="item-title">{m.title}</div>
                 <div className="muted small">{fmtDate(m.startedAt)}{m.sourceApp && m.sourceApp !== 'import' ? ` · ${m.sourceApp}` : ''}</div>

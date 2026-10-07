@@ -46,7 +46,9 @@ There is no linter configured.
   - The `recording:state`, `app:quit-ready` and `app:applyHotkeys` channels check their sender too.
   - The window runs with `sandbox: true` and `contextIsolation`. Navigation away from the app is blocked, and only `http(s)` links open externally (`isSafeExternalUrl`).
   - Only the app's page gets the `media`/`display-capture` permissions and system-audio capture.
-- To add a new main→renderer event, add it to `EVENTS` in the preload and send it with `broadcast()` from `api.ts`.
+- **To add a new main→renderer event,** add it with its argument types to `MainEvents` in `src/shared/types.ts`, and to `EVENT_NAMES` there; a missing entry is a compile error. Then send it with `broadcast()`.
+  - The preload's allow-list is `MAIN_EVENTS`.
+  - `broadcast()` and `useEvent()` are typed from `MainEvents`, so a wrong channel or payload doesn't compile.
 
 ### Recording pipeline (spans renderer and main)
 
@@ -159,6 +161,8 @@ There is no linter configured.
   - Its `busy` flag disables the button, and a second trigger while it runs is ignored, so actions can't double-submit.
   - Do success-only follow-up, such as closing a dialog, inside the action. A dialog then stays open, with its input, when the save fails.
   - `MeetingView` uses its own `run(label, fn)` for page-level actions; it also reloads the meeting afterwards.
+- **Keyboard access:** anything clickable that isn't a `<button>` (cards, list rows, quotes) spreads `clickable(fn)` from `ui.tsx`. That gives `role="button"`, `tabIndex=0`, and Enter/Space activation. Prefer a real `<button>` (styled with `.text-btn` if it should look like text) where the markup allows.
+- **"Accept all firm"** never bulk-accepts `close` or `supersede` proposals, because they remove items from the project state. Those always need their own click.
 
 ## Known limitations
 

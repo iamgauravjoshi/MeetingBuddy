@@ -40,3 +40,22 @@ describe('mergeStreams', () => {
     expect(out.map((s) => s.speaker)).toEqual(['Me', 'Speaker 1'])
   })
 })
+
+describe('parseTranscript labels', () => {
+  it('keeps note labels like "Decision:" in the current speaker\'s line', () => {
+    const segs = parseTranscript('Priya: We talked it through.\nDecision: use Postgres for the backend.\nAction item: Rahul writes the migration plan.\nRahul: OK.')
+    expect(segs.map((s) => s.speaker)).toEqual(['Priya', 'Rahul'])
+    expect(segs[0].text).toBe('We talked it through. Decision: use Postgres for the backend. Action item: Rahul writes the migration plan.')
+  })
+  it('does the same inside subtitle cues', () => {
+    const vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nPriya: Ship Friday.\n\n00:00:03.500 --> 00:00:05.000\nNote: pending legal review\n'
+    expect(parseTranscript(vtt).map((s) => [s.speaker, s.text])).toEqual([['Priya', 'Ship Friday. Note: pending legal review']])
+  })
+})
+
+describe('fmtTime', () => {
+  it('formats seconds as mm:ss, and h:mm:ss from one hour on', async () => {
+    const { fmtTime } = await import('@shared/format')
+    expect([fmtTime(0), fmtTime(17.9), fmtTime(754), fmtTime(3600), fmtTime(3725), fmtTime(-5)]).toEqual(['00:00', '00:17', '12:34', '1:00:00', '1:02:05', '00:00'])
+  })
+})

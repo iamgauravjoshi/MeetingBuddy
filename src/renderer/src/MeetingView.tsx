@@ -12,7 +12,7 @@ import {
   type Stakeholder
 } from '@shared/types'
 import { api, errMsg } from './api'
-import { ErrorBox, Field, fmtDate, fmtTime, Modal, useAction, useEvent } from './ui'
+import { clickable, ErrorBox, Field, fmtDate, fmtTime, Modal, useAction, useEvent } from './ui'
 
 const OP_BADGE: Record<Proposal['op'], [string, string]> = {
   create: ['NEW', 'green'],
@@ -128,7 +128,9 @@ export function MeetingView(props: {
       <div className="header" style={{ marginBottom: 0 }}>
         <button className="btn ghost" onClick={() => props.onBack(meeting.projectId)}>← Meetings</button>
         <div>
-          <h1 style={{ cursor: 'pointer' }} title="Rename" onClick={() => setRenaming(true)}>{meeting.title}</h1>
+          <h1>
+            <button className="text-btn" title="Rename" onClick={() => setRenaming(true)}>{meeting.title}</button>
+          </h1>
           <div className="muted small">
             {fmtDate(meeting.startedAt)}
             {meeting.sourceApp && meeting.sourceApp !== 'import' && ` · ${meeting.sourceApp}`} · {segments.length} transcript lines
@@ -224,11 +226,13 @@ export function MeetingView(props: {
                 <button
                   className="btn sm"
                   disabled={pending === 0 || !!busy}
-                  title="Accept every firm, evidence-backed change with confidence of at least 0.7"
+                  title="Accept every firm, evidence-backed change with confidence of at least 0.7. Changes that close or replace an item always need your own click."
                   onClick={() =>
                     void run('Accepting firm changes…', async () => {
                       for (const p of proposals) {
-                        if (p.status === 'pending' && p.strength === 'firm' && p.confidence >= 0.7) await api.updateProposal(p.id, { status: 'accepted' })
+                        // closing or replacing an item removes it from the project state, so those are never bulk-accepted
+                        const bulk = p.status === 'pending' && p.strength === 'firm' && p.confidence >= 0.7 && p.op !== 'close' && p.op !== 'supersede'
+                        if (bulk) await api.updateProposal(p.id, { status: 'accepted' })
                       }
                     })
                   }
@@ -370,7 +374,7 @@ function ProposalCard(props: {
       </div>
       {p.rationale && <div className="small muted">{p.rationale}</div>}
       {p.evidence.map((e, i) => (
-        <div key={i} className="quote small" onClick={() => props.onJump(e.segmentId)} title="Show in transcript">
+        <div key={i} className="quote small" title="Show in transcript" {...clickable(() => props.onJump(e.segmentId))}>
           “{e.quote}” <span className="muted">— {e.speaker} @ {fmtTime(e.t)}</span>
         </div>
       ))}

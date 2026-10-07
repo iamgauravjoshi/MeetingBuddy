@@ -109,3 +109,9 @@ label.field > span { font-weight: 500; }
 .history-entry { border-left: 2px solid var(--border); padding: 2px 0 6px 10px; }
 .empty { padding: 32px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: var(--radius); }
 .kbd { font-family: ui-monospace, monospace; font-size: 11px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+
+/* keyboard access: clickable cards, rows and quotes act as buttons, so show where focus is */
+[role='button']:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[role='button'] { cursor: pointer; }
+/* a button that looks like the text around it, e.g. the meeting title */
+.text-btn { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }

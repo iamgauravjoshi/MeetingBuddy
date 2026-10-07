@@ -287,3 +287,19 @@ describe('tx', () => {
     expect(db.listProjects().map((p) => p.name)).toEqual(['After'])
   })
 })
+
+describe('reports', () => {
+  beforeEach(() => db.openDb(':memory:'))
+
+  it('returns proposals in the order they were ranked', () => {
+    const p = db.createProject('P', '')
+    const m = db.createMeeting(p.id, 'M', 'analyzed')
+    const proposal = (title: string) => ({
+      category: 'decision' as const, op: 'create' as const, targetItemId: null, targetVersion: null, itemType: 'decision' as const, title, body: '',
+      owner: '', dueDate: '', speaker: 'A', strength: 'firm' as const, confidence: 0.9, impact: 'high' as const, rationale: '', evidence: []
+    })
+    const titles = ['Zeta', 'Alpha', 'Mu', 'Beta', 'Omega']
+    db.saveReport(m.id, 'mock', 's', 0, titles.map(proposal))
+    expect(db.getReport(m.id)!.proposals.map((x) => x.title)).toEqual(titles)
+  })
+})

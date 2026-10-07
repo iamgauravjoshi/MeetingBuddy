@@ -392,7 +392,8 @@ export function getReport(mid: string): { report: Report; proposals: Proposal[] 
   const r = db.prepare('SELECT * FROM reports WHERE meeting_id = ?').get(mid) as Row | undefined
   if (!r) return null
   const report: Report = { id: r.id, meetingId: r.meeting_id, createdAt: r.created_at, model: r.model, summary: r.summary, droppedCount: r.dropped_count }
-  const proposals = (db.prepare('SELECT * FROM proposals WHERE report_id = ?').all(r.id) as Row[]).map(toProposal)
+  // insertion order is the ranking validateChanges produced (impact, then confidence)
+  const proposals = (db.prepare('SELECT * FROM proposals WHERE report_id = ? ORDER BY rowid').all(r.id) as Row[]).map(toProposal)
   return { report, proposals }
 }
 export function getProposal(pid: string): Proposal | null {

@@ -11,6 +11,7 @@ import {
   type Segment,
   type StateVersion
 } from '@shared/types'
+import { fmtTime } from '@shared/format'
 import * as db from './db'
 import { getModel } from './llm'
 import { getSettings } from './settings'
@@ -24,15 +25,6 @@ const TYPE_PREFIX: Record<ItemType, string> = {
   risk: 'RSK',
   deadline: 'DL',
   question: 'Q'
-}
-
-export function fmtTime(sec: number): string {
-  const s = Math.max(0, Math.floor(sec))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const r = s % 60
-  const pad = (n: number): string => String(n).padStart(2, '0')
-  return h ? `${h}:${pad(m)}:${pad(r)}` : `${pad(m)}:${pad(r)}`
 }
 
 /** Short, model-friendly IDs (e.g. DEC-3, S42) mapped back to database IDs. */

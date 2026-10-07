@@ -1,15 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { MAIN_EVENTS } from '@shared/types'
 
-const EVENTS = [
-  'hotkey:record',
-  'hotkey:mark',
-  'meeting:detected',
-  'meeting:ended',
-  'meeting:changed',
-  'transcript:appended',
-  'navigate:meeting',
-  'app:quit-requested'
-]
+const EVENTS: readonly string[] = MAIN_EVENTS
 
 contextBridge.exposeInMainWorld('mb', {
   invoke: (name: string, ...args: unknown[]) => ipcRenderer.invoke(`api:${name}`, ...args),

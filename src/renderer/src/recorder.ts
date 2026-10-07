@@ -2,7 +2,9 @@ import { api } from './api'
 
 type Source = 'mic' | 'system'
 const MIME = 'audio/webm;codecs=opus'
-const BITRATE = 24000 // ~11 MB per hour per stream; keeps full files under Whisper's 25 MB limit
+// ~11 MB per hour per stream, so recordings up to ~2.3 h fit OpenAI/Groq's 25 MB limit. Longer ones are
+// refused by those providers before upload and keep their live transcript; Deepgram accepts up to 2 GB.
+const BITRATE = 24000
 
 interface Track {
   source: Source

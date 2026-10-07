@@ -72,6 +72,9 @@ There is no linter configured.
 
 4. **Meeting detection** lives in `detector.ts`. It polls the Windows `CapabilityAccessManager\ConsentStore\microphone` registry: an app is using the mic when `LastUsedTimeStop == 0`.
    - It emits `start` and `end` events.
+   - `end` fires only after every meeting app has been off the mic for `END_GRACE_MS` (10 s, so about 12 s with the 4 s poll). Brief releases, such as an audio-device switch, don't stop a recording, and an app that returns within the grace period doesn't fire `start` again.
+   - Polls never overlap: `check()` is skipped while the previous one is still running.
+   - The registry parsing is the pure `parseMicUsers`. `MeetingDetector` accepts `poll`/`now`/`graceMs` options so tests can script it.
    - `index.ts` turns `start` into a notification and banner.
    - It turns `end` (while recording) into the `meeting:ended` event, which auto-stops recording.
    - **Recording state is owned by the renderer (`App.tsx`)**. It reports back via `window.mb.setRecordingState` so that main's tray menu and hotkeys stay in sync.
@@ -136,6 +139,8 @@ There is no linter configured.
   - LLM and STT keys share one secrets map, keyed by provider id.
 - `llm.ts` builds the model from settings. OpenRouter, Ollama and custom endpoints all go through `@ai-sdk/openai-compatible`.
 - `stt.ts` calls Deepgram REST directly (with `diarize` only for the system stream) or an OpenAI-compatible `/audio/transcriptions` endpoint (OpenAI/Groq, without diarization).
+  - The Whisper upload is named after its real format (for example `audio.mp3`), because those endpoints detect the format from the file name.
+  - `checkUploadSize` refuses files over `MAX_UPLOAD_BYTES` (OpenAI/Groq 25 MB, Deepgram 2 GB) before uploading. `importAudio` checks the size before reading the file. There is no ffmpeg splitting: a recording that is too large keeps its live transcript, and the error suggests Deepgram.
 
 ## Tests
 

@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from 'node:fs'
+import { readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SegmentSource } from '@shared/types'
@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
   app: { getPath: () => userData },
   BrowserWindow: { getAllWindows: () => [] },
   Notification: { isSupported: () => false },
-  dialog: {}
+  dialog: { showOpenDialog: vi.fn() }
 }))
 vi.mock('../src/main/settings', () => ({ getSettings: () => settings }))
 vi.mock('../src/main/llm', () => ({}))
@@ -142,5 +142,19 @@ describe('transcribing a recovered recording', () => {
     settings.sttProvider = 'none'
     const m = db.createMeeting(projectId, 'X', 'ready')
     expect(() => api.transcribeRecording(m.id)).toThrow(/speech-to-text/)
+  })
+})
+
+describe('importing a recording', () => {
+  it('refuses a file over the provider limit before reading it', async () => {
+    settings.sttProvider = 'openai'
+    const big = join(userData, 'long-meeting.mp3')
+    writeFileSync(big, '')
+    truncateSync(big, 26 * 1024 * 1024) // sparse: large on paper, nothing to read
+    const { dialog } = await import('electron')
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [big] })
+
+    await expect(api.importAudio(projectId)).rejects.toThrow(/25 MB/)
+    expect(transcribe).not.toHaveBeenCalled()
   })
 })

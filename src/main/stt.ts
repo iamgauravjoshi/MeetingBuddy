@@ -9,6 +9,35 @@ const DEFAULT_STT_MODEL = { deepgram: 'nova-3', openai: 'whisper-1', groq: 'whis
 export const CHUNK_TIMEOUT_MS = 60_000
 export const FILE_TIMEOUT_MS = 10 * 60_000
 
+const MB = 1024 * 1024
+/** Largest file each provider accepts in one request. Larger OpenAI/Groq uploads are refused before sending. */
+export const MAX_UPLOAD_BYTES: Record<Exclude<Settings['sttProvider'], 'none'>, number> = {
+  openai: 25 * MB,
+  groq: 25 * MB,
+  deepgram: 2048 * MB
+}
+
+/** Throws a clear error if a file is too large for the chosen provider. */
+export function checkUploadSize(provider: Settings['sttProvider'], bytes: number): void {
+  if (provider === 'none' || bytes <= MAX_UPLOAD_BYTES[provider]) return
+  const name = { openai: 'OpenAI', groq: 'Groq', deepgram: 'Deepgram' }[provider]
+  const limit = MAX_UPLOAD_BYTES[provider] / MB
+  throw new Error(
+    `The audio is ${(bytes / MB).toFixed(1)} MB, but ${name} accepts at most ${limit} MB per file.` +
+      (provider === 'deepgram' ? '' : ' Choose Deepgram in Settings for long recordings; it accepts files up to 2 GB.')
+  )
+}
+
+// Whisper endpoints detect the format from the file name, so the upload must carry the real extension
+const EXTENSION: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/wav': 'wav',
+  'audio/ogg': 'ogg',
+  'video/mp4': 'mp4'
+}
+
 /**
  * Transcribes one audio file (webm/opus from MediaRecorder).
  * The mic stream is always the local user; the system stream contains everyone else.
@@ -22,6 +51,7 @@ export async function transcribe(
   timeoutMs: number
 ): Promise<RawSegment[]> {
   if (s.sttProvider === 'none') return []
+  checkUploadSize(s.sttProvider, audio.byteLength)
   const signal = AbortSignal.timeout(timeoutMs)
   try {
     return await request(s, audio, mime, source, offsetSec, signal)
@@ -69,7 +99,8 @@ async function request(
   // OpenAI-compatible Whisper endpoint (OpenAI or Groq): segments, but no diarization
   const base = s.sttProvider === 'groq' ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1'
   const form = new FormData()
-  form.append('file', new Blob([new Uint8Array(audio)], { type: mime }), 'audio.webm')
+  const ext = EXTENSION[mime.split(';')[0].trim()] ?? 'webm'
+  form.append('file', new Blob([new Uint8Array(audio)], { type: mime }), `audio.${ext}`)
   form.append('model', model)
   form.append('response_format', 'verbose_json')
   form.append('timestamp_granularities[]', 'segment')

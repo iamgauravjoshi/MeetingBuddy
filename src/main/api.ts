@@ -5,7 +5,7 @@ import type { Item, LlmProvider, Proposal, Settings, Stakeholder, SttProvider } 
 import * as db from './db'
 import { analyzeMeeting, applyApproved } from './analysis'
 import { getSettings, saveSettings, setSecret } from './settings'
-import { CHUNK_TIMEOUT_MS, FILE_TIMEOUT_MS, mergeStreams, transcribe } from './stt'
+import { checkUploadSize, CHUNK_TIMEOUT_MS, FILE_TIMEOUT_MS, mergeStreams, transcribe } from './stt'
 import { parseTranscript } from './transcriptParser'
 import { getModel } from './llm'
 import { deleteMeetingAudio, meetingAudioDir, sweepOrphanedAudio } from './audio'
@@ -189,12 +189,15 @@ export const api = {
     if (s.sttProvider === 'none') throw new Error('Choose a speech-to-text provider in Settings first.')
     const r = await dialog.showOpenDialog({
       properties: ['openFile'],
-      filters: [{ name: 'Audio / video', extensions: ['mp3', 'm4a', 'wav', 'webm', 'ogg', 'mp4', 'mkv'] }]
+      // formats every speech-to-text provider accepts
+      filters: [{ name: 'Audio / video', extensions: ['mp3', 'm4a', 'wav', 'webm', 'ogg', 'mp4'] }]
     })
     if (r.canceled || !r.filePaths[0]) return null
     const p = r.filePaths[0]
+    // check the size before reading: a long video would otherwise be loaded into memory only to be refused
+    checkUploadSize(s.sttProvider, statSync(p).size)
     const ext = p.split('.').pop()!.toLowerCase()
-    const mime = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', webm: 'audio/webm', ogg: 'audio/ogg', mp4: 'video/mp4', mkv: 'video/x-matroska' }[ext] ?? 'application/octet-stream'
+    const mime = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', webm: 'audio/webm', ogg: 'audio/ogg', mp4: 'video/mp4' }[ext] ?? 'application/octet-stream'
     const segs = await transcribe(s, readFileSync(p), mime, 'system', 0, FILE_TIMEOUT_MS)
     if (segs.length === 0) throw new Error('No speech was found in that file.')
     const m = db.createMeeting(projectId, p.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, ''), 'ready', 'import')

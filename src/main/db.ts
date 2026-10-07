@@ -142,6 +142,7 @@ function backup(file: string, version: number): void {
 
 const now = (): string => new Date().toISOString()
 const id = (): string => randomUUID()
+// biome-ignore lint/suspicious/noExplicitAny: raw SQLite rows; the to* mappers below give them their types
 type Row = Record<string, any>
 
 /** Runs fn in a transaction. Nested calls become savepoints, so a failing inner call rolls back only its own work. */
@@ -167,22 +168,58 @@ export function tx<T>(fn: () => T): T {
 const toProject = (r: Row): Project => ({ id: r.id, name: r.name, description: r.description, createdAt: r.created_at })
 const toStakeholder = (r: Row): Stakeholder => ({ id: r.id, projectId: r.project_id, name: r.name, role: r.role, email: r.email })
 const toItem = (r: Row): Item => ({
-  id: r.id, projectId: r.project_id, type: r.type, title: r.title, body: r.body, status: r.status,
-  owner: r.owner, dueDate: r.due_date, version: r.version, createdAt: r.created_at, updatedAt: r.updated_at
+  id: r.id,
+  projectId: r.project_id,
+  type: r.type,
+  title: r.title,
+  body: r.body,
+  status: r.status,
+  owner: r.owner,
+  dueDate: r.due_date,
+  version: r.version,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at
 })
 const toMeeting = (r: Row): Meeting => ({
-  id: r.id, projectId: r.project_id, title: r.title, startedAt: r.started_at, endedAt: r.ended_at,
-  status: r.status, sourceApp: r.source_app, error: r.error
+  id: r.id,
+  projectId: r.project_id,
+  title: r.title,
+  startedAt: r.started_at,
+  endedAt: r.ended_at,
+  status: r.status,
+  sourceApp: r.source_app,
+  error: r.error
 })
 const toSegment = (r: Row): Segment => ({
-  id: r.id, meetingId: r.meeting_id, idx: r.idx, speaker: r.speaker, tStart: r.t_start, tEnd: r.t_end,
-  text: r.text, source: r.source
+  id: r.id,
+  meetingId: r.meeting_id,
+  idx: r.idx,
+  speaker: r.speaker,
+  tStart: r.t_start,
+  tEnd: r.t_end,
+  text: r.text,
+  source: r.source
 })
 const toProposal = (r: Row): Proposal => ({
-  id: r.id, reportId: r.report_id, meetingId: r.meeting_id, category: r.category, op: r.op,
-  targetItemId: r.target_item_id, itemType: r.item_type, title: r.title, body: r.body, owner: r.owner,
-  dueDate: r.due_date, speaker: r.speaker, strength: r.strength, confidence: r.confidence, impact: r.impact,
-  rationale: r.rationale, evidence: JSON.parse(r.evidence) as Evidence[], status: r.status, targetVersion: r.target_version ?? null
+  id: r.id,
+  reportId: r.report_id,
+  meetingId: r.meeting_id,
+  category: r.category,
+  op: r.op,
+  targetItemId: r.target_item_id,
+  itemType: r.item_type,
+  title: r.title,
+  body: r.body,
+  owner: r.owner,
+  dueDate: r.due_date,
+  speaker: r.speaker,
+  strength: r.strength,
+  confidence: r.confidence,
+  impact: r.impact,
+  rationale: r.rationale,
+  evidence: JSON.parse(r.evidence) as Evidence[],
+  status: r.status,
+  targetVersion: r.target_version ?? null
 })
 
 // ---------- projects ----------
@@ -232,7 +269,9 @@ export function getItem(iid: string): Item | null {
   const r = db.prepare('SELECT * FROM items WHERE id = ?').get(iid) as Row | undefined
   return r ? toItem(r) : null
 }
-export function createItem(i: Pick<Item, 'projectId' | 'type' | 'title' | 'body' | 'owner' | 'dueDate'> & { status?: Item['status'] }): Item {
+export function createItem(
+  i: Pick<Item, 'projectId' | 'type' | 'title' | 'body' | 'owner' | 'dueDate'> & { status?: Item['status'] }
+): Item {
   const t = now()
   const item: Item = { id: id(), status: 'open', version: 1, createdAt: t, updatedAt: t, ...i } as Item
   db.prepare(
@@ -266,7 +305,13 @@ export function deleteItem(iid: string): void {
 
 export function addItemHistory(h: { itemId: string; meetingId: string | null; summary: string; speaker: string; quote: string }): void {
   db.prepare('INSERT INTO item_history (id, item_id, meeting_id, summary, speaker, quote, at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-    id(), h.itemId, h.meetingId, h.summary, h.speaker, h.quote, now()
+    id(),
+    h.itemId,
+    h.meetingId,
+    h.summary,
+    h.speaker,
+    h.quote,
+    now()
   )
 }
 export function getItemHistory(iid: string): ItemHistoryEntry[] {
@@ -277,8 +322,14 @@ export function getItemHistory(iid: string): ItemHistoryEntry[] {
     )
     .all(iid) as Row[]
   return rows.map((r) => ({
-    id: r.id, itemId: r.item_id, meetingId: r.meeting_id, meetingTitle: r.meeting_title,
-    summary: r.summary, speaker: r.speaker, quote: r.quote, at: r.at
+    id: r.id,
+    itemId: r.item_id,
+    meetingId: r.meeting_id,
+    meetingTitle: r.meeting_title,
+    summary: r.summary,
+    speaker: r.speaker,
+    quote: r.quote,
+    at: r.at
   }))
 }
 
@@ -297,7 +348,12 @@ export function getMeeting(mid: string): Meeting | null {
 export function createMeeting(pid: string, title: string, status: MeetingStatus, sourceApp = ''): Meeting {
   const m: Meeting = { id: id(), projectId: pid, title, startedAt: now(), endedAt: null, status, sourceApp, error: null }
   db.prepare('INSERT INTO meetings (id, project_id, title, started_at, ended_at, status, source_app) VALUES (?, ?, ?, ?, NULL, ?, ?)').run(
-    m.id, pid, title, m.startedAt, status, sourceApp
+    m.id,
+    pid,
+    title,
+    m.startedAt,
+    status,
+    sourceApp
   )
   return m
 }
@@ -305,7 +361,13 @@ export function updateMeeting(mid: string, patch: Partial<Pick<Meeting, 'title' 
   const cur = getMeeting(mid)
   if (!cur) return
   const n = { ...cur, ...patch }
-  db.prepare('UPDATE meetings SET title = ?, status = ?, ended_at = ?, error = ? WHERE id = ?').run(n.title, n.status, n.endedAt, n.error, mid)
+  db.prepare('UPDATE meetings SET title = ?, status = ?, ended_at = ?, error = ? WHERE id = ?').run(
+    n.title,
+    n.status,
+    n.endedAt,
+    n.error,
+    mid
+  )
 }
 /**
  * Startup recovery: meetings left in 'recording' or 'transcribing' were cut off by a quit or crash.
@@ -336,7 +398,9 @@ export function listSegments(mid: string): Segment[] {
 }
 export function addSegments(mid: string, segs: Omit<Segment, 'id' | 'meetingId' | 'idx'>[]): Segment[] {
   const start = (db.prepare('SELECT COALESCE(MAX(idx), -1) + 1 AS n FROM segments WHERE meeting_id = ?').get(mid) as Row).n as number
-  const stmt = db.prepare('INSERT INTO segments (id, meeting_id, idx, speaker, t_start, t_end, text, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+  const stmt = db.prepare(
+    'INSERT INTO segments (id, meeting_id, idx, speaker, t_start, t_end, text, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  )
   return tx(() =>
     segs.map((s, k) => {
       const seg: Segment = { ...s, id: id(), meetingId: mid, idx: start + k }
@@ -351,7 +415,10 @@ export function renameSpeaker(mid: string, from: string, to: string): void {
 
 export function listMarks(mid: string): Mark[] {
   return (db.prepare('SELECT * FROM marks WHERE meeting_id = ? ORDER BY t').all(mid) as Row[]).map((r) => ({
-    id: r.id, meetingId: r.meeting_id, t: r.t, kind: r.kind
+    id: r.id,
+    meetingId: r.meeting_id,
+    t: r.t,
+    kind: r.kind
   }))
 }
 export function addMark(mid: string, t: number, kind: string): void {
@@ -377,12 +444,33 @@ export function saveReport(
     // a meeting keeps only its latest report
     db.prepare('DELETE FROM reports WHERE meeting_id = ?').run(mid)
     db.prepare('INSERT INTO reports (id, meeting_id, created_at, model, summary, dropped_count) VALUES (?, ?, ?, ?, ?, ?)').run(
-      rep.id, mid, rep.createdAt, model, summary, droppedCount
+      rep.id,
+      mid,
+      rep.createdAt,
+      model,
+      summary,
+      droppedCount
     )
     for (const p of proposals) {
       stmt.run(
-        id(), rep.id, mid, p.category, p.op, p.targetItemId, p.itemType, p.title, p.body, p.owner, p.dueDate,
-        p.speaker, p.strength, p.confidence, p.impact, p.rationale, JSON.stringify(p.evidence), p.targetVersion
+        id(),
+        rep.id,
+        mid,
+        p.category,
+        p.op,
+        p.targetItemId,
+        p.itemType,
+        p.title,
+        p.body,
+        p.owner,
+        p.dueDate,
+        p.speaker,
+        p.strength,
+        p.confidence,
+        p.impact,
+        p.rationale,
+        JSON.stringify(p.evidence),
+        p.targetVersion
       )
     }
   })
@@ -391,8 +479,16 @@ export function saveReport(
 export function getReport(mid: string): { report: Report; proposals: Proposal[] } | null {
   const r = db.prepare('SELECT * FROM reports WHERE meeting_id = ?').get(mid) as Row | undefined
   if (!r) return null
-  const report: Report = { id: r.id, meetingId: r.meeting_id, createdAt: r.created_at, model: r.model, summary: r.summary, droppedCount: r.dropped_count }
-  const proposals = (db.prepare('SELECT * FROM proposals WHERE report_id = ?').all(r.id) as Row[]).map(toProposal)
+  const report: Report = {
+    id: r.id,
+    meetingId: r.meeting_id,
+    createdAt: r.created_at,
+    model: r.model,
+    summary: r.summary,
+    droppedCount: r.dropped_count
+  }
+  // insertion order is the ranking validateChanges produced (impact, then confidence)
+  const proposals = (db.prepare('SELECT * FROM proposals WHERE report_id = ? ORDER BY rowid').all(r.id) as Row[]).map(toProposal)
   return { report, proposals }
 }
 export function getProposal(pid: string): Proposal | null {
@@ -407,7 +503,13 @@ export function updateProposal(
   if (!cur) return
   const n = { ...cur, ...patch }
   db.prepare('UPDATE proposals SET status = ?, title = ?, body = ?, owner = ?, due_date = ?, item_type = ? WHERE id = ?').run(
-    n.status as ProposalStatus, n.title, n.body, n.owner, n.dueDate, n.itemType as ItemType, pid
+    n.status as ProposalStatus,
+    n.title,
+    n.body,
+    n.owner,
+    n.dueDate,
+    n.itemType as ItemType,
+    pid
   )
 }
 
@@ -415,7 +517,11 @@ export function updateProposal(
 
 export function addStateVersion(pid: string, mid: string | null, changes: StateVersion['changes']): void {
   db.prepare('INSERT INTO state_versions (id, project_id, meeting_id, created_at, changes) VALUES (?, ?, ?, ?, ?)').run(
-    id(), pid, mid, now(), JSON.stringify(changes)
+    id(),
+    pid,
+    mid,
+    now(),
+    JSON.stringify(changes)
   )
 }
 export function listStateVersions(pid: string): StateVersion[] {
@@ -426,8 +532,12 @@ export function listStateVersions(pid: string): StateVersion[] {
     )
     .all(pid) as Row[]
   return rows.map((r) => ({
-    id: r.id, projectId: r.project_id, meetingId: r.meeting_id, meetingTitle: r.meeting_title,
-    createdAt: r.created_at, changes: JSON.parse(r.changes)
+    id: r.id,
+    projectId: r.project_id,
+    meetingId: r.meeting_id,
+    meetingTitle: r.meeting_title,
+    createdAt: r.created_at,
+    changes: JSON.parse(r.changes)
   }))
 }
 
@@ -437,7 +547,11 @@ export function listStateVersions(pid: string): StateVersion[] {
  * proposals that were rejected. Meetings at or after `meetingId` are left out, so re-analyzing an old meeting
  * doesn't see the future.
  */
-export function recentMeetingChanges(pid: string, meetingId: string, limit = 5): { title: string; date: string; changes: StateVersion['changes'] }[] {
+export function recentMeetingChanges(
+  pid: string,
+  meetingId: string,
+  limit = 5
+): { title: string; date: string; changes: StateVersion['changes'] }[] {
   const meetings = db
     .prepare(
       `SELECT m.id, m.title, m.started_at FROM meetings m

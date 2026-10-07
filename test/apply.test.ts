@@ -26,8 +26,20 @@ import { analyzeMeeting, applyApproved } from '../src/main/analysis'
 const LINE = 'We will use Postgres for the backend, and the payments question is settled.'
 const QUOTE = 'we will use Postgres for the backend'
 const change = (over: Record<string, unknown>) => ({
-  category: 'decision', op: 'create', target_item: null, item_type: 'decision', title: 'Change', body: '', owner: '', due_date: '',
-  speaker: 'Priya', strength: 'firm', confidence: 0.9, impact: 'high', rationale: 'Because.', evidence: [{ line: 'S1', quote: QUOTE }],
+  category: 'decision',
+  op: 'create',
+  target_item: null,
+  item_type: 'decision',
+  title: 'Change',
+  body: '',
+  owner: '',
+  due_date: '',
+  speaker: 'Priya',
+  strength: 'firm',
+  confidence: 0.9,
+  impact: 'high',
+  rationale: 'Because.',
+  evidence: [{ line: 'S1', quote: QUOTE }],
   ...over
 })
 
@@ -65,13 +77,17 @@ describe('applying changes to items that changed since the analysis', () => {
   it('skips closing an item that was deleted, instead of creating a new one', async () => {
     const q = item('question', 'Do we support payments?')
     const m = meeting()
-    await analyzeAndAccept(m, [change({ category: 'open_question', op: 'close', target_item: 'Q-1', item_type: 'question', title: 'Do we support payments?' })])
+    await analyzeAndAccept(m, [
+      change({ category: 'open_question', op: 'close', target_item: 'Q-1', item_type: 'question', title: 'Do we support payments?' })
+    ])
     db.deleteItem(q.id)
 
     const result = applyApproved(m)
 
     expect(result.applied).toBe(0)
-    expect(result.skipped).toEqual([expect.objectContaining({ title: 'Do we support payments?', reason: expect.stringMatching(/deleted/i) })])
+    expect(result.skipped).toEqual([
+      expect.objectContaining({ title: 'Do we support payments?', reason: expect.stringMatching(/deleted/i) })
+    ])
     expect(db.listItems(projectId)).toEqual([])
     expect(db.getReport(m)!.proposals[0].status).toBe('accepted')
   })
@@ -106,7 +122,14 @@ describe('applying changes to items that changed since the analysis', () => {
     const t = item('task', 'Write the API spec')
     const m = meeting()
     await analyzeAndAccept(m, [
-      change({ category: 'action_item', op: 'update', target_item: 'TSK-1', item_type: 'task', title: 'Write the API spec', owner: 'Rahul' }),
+      change({
+        category: 'action_item',
+        op: 'update',
+        target_item: 'TSK-1',
+        item_type: 'task',
+        title: 'Write the API spec',
+        owner: 'Rahul'
+      }),
       change({ category: 'action_item', op: 'close', target_item: 'TSK-1', item_type: 'task', title: 'Write the API spec' })
     ])
 
@@ -117,17 +140,24 @@ describe('applying changes to items that changed since the analysis', () => {
   it('turns a flagged conflict into an open question', async () => {
     const d = item('decision', 'Use Firebase')
     const m = meeting()
-    await analyzeAndAccept(m, [change({ category: 'conflict', op: 'flag', target_item: 'DEC-1', item_type: 'question', title: 'Postgres vs Firebase' })])
+    await analyzeAndAccept(m, [
+      change({ category: 'conflict', op: 'flag', target_item: 'DEC-1', item_type: 'question', title: 'Postgres vs Firebase' })
+    ])
 
     expect(applyApproved(m).applied).toBe(1)
-    expect(db.listItems(projectId).find((i) => i.type === 'question')).toMatchObject({ title: 'Resolve conflict: Postgres vs Firebase', status: 'open' })
+    expect(db.listItems(projectId).find((i) => i.type === 'question')).toMatchObject({
+      title: 'Resolve conflict: Postgres vs Firebase',
+      status: 'open'
+    })
     expect(db.getItemHistory(d.id)[0].summary).toMatch(/Conflict flagged/)
   })
 
   it('does not bump the version of an item an update leaves unchanged', async () => {
     const t = item('task', 'Write the API spec')
     const m = meeting()
-    await analyzeAndAccept(m, [change({ category: 'action_item', op: 'update', target_item: 'TSK-1', item_type: 'task', title: 'Write the API spec' })])
+    await analyzeAndAccept(m, [
+      change({ category: 'action_item', op: 'update', target_item: 'TSK-1', item_type: 'task', title: 'Write the API spec' })
+    ])
 
     expect(applyApproved(m).applied).toBe(1)
     expect(db.getItem(t.id)?.version).toBe(1)

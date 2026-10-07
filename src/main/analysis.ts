@@ -11,6 +11,7 @@ import {
   type Segment,
   type StateVersion
 } from '@shared/types'
+import { fmtTime } from '@shared/format'
 import * as db from './db'
 import { getModel } from './llm'
 import { getSettings } from './settings'
@@ -26,28 +27,22 @@ const TYPE_PREFIX: Record<ItemType, string> = {
   question: 'Q'
 }
 
-export function fmtTime(sec: number): string {
-  const s = Math.max(0, Math.floor(sec))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const r = s % 60
-  const pad = (n: number): string => String(n).padStart(2, '0')
-  return h ? `${h}:${pad(m)}:${pad(r)}` : `${pad(m)}:${pad(r)}`
-}
-
 /** Short, model-friendly IDs (e.g. DEC-3, S42) mapped back to database IDs. */
 function buildRefs(items: Item[], segments: Segment[]) {
   const itemRef = new Map<string, Item>()
   const counters: Partial<Record<ItemType, number>> = {}
   const itemLines: string[] = []
   for (const it of items) {
-    const n = (counters[it.type] = (counters[it.type] ?? 0) + 1)
+    const n = (counters[it.type] ?? 0) + 1
+    counters[it.type] = n
     const ref = `${TYPE_PREFIX[it.type]}-${n}`
     itemRef.set(ref, it)
     const meta = [it.status !== 'open' && `status: ${it.status}`, it.owner && `owner: ${it.owner}`, it.dueDate && `due: ${it.dueDate}`]
       .filter(Boolean)
       .join(', ')
-    itemLines.push(`[${ref}] (${it.type}) ${it.title}${meta ? ` {${meta}}` : ''}${it.body ? `\n    ${it.body.replace(/\n/g, '\n    ')}` : ''}`)
+    itemLines.push(
+      `[${ref}] (${it.type}) ${it.title}${meta ? ` {${meta}}` : ''}${it.body ? `\n    ${it.body.replace(/\n/g, '\n    ')}` : ''}`
+    )
   }
   const segRef = new Map<string, Segment>()
   const segLines = segments.map((s, i) => {
@@ -67,7 +62,9 @@ const OP_VERB: Record<StateVersion['changes'][number]['op'], string> = {
   flag: 'Flagged a conflict, opened'
 }
 const shortValue = (v: unknown): string => {
-  const s = String(v ?? '').replace(/\s+/g, ' ').trim()
+  const s = String(v ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
   return !s ? '∅' : s.length > 80 ? `${s.slice(0, 79)}…` : s
 }
 
@@ -154,10 +151,33 @@ const MIN_SPAN_COVERED = 0.75 // share of the matched transcript span that the q
 
 // Words that flip a statement's meaning. A quote may never add one or leave one out.
 const NEGATIONS = new Set([
-  'not', 'no', 'never', 'none', 'nobody', 'nothing', 'neither', 'nor', 'cannot', 'without',
+  'not',
+  'no',
+  'never',
+  'none',
+  'nobody',
+  'nothing',
+  'neither',
+  'nor',
+  'cannot',
+  'without',
   // "n't" forms typed without the apostrophe
-  'dont', 'doesnt', 'didnt', 'wont', 'cant', 'couldnt', 'shouldnt', 'wouldnt', 'isnt', 'arent', 'wasnt', 'werent',
-  'havent', 'hasnt', 'hadnt', 'aint'
+  'dont',
+  'doesnt',
+  'didnt',
+  'wont',
+  'cant',
+  'couldnt',
+  'shouldnt',
+  'wouldnt',
+  'isnt',
+  'arent',
+  'wasnt',
+  'werent',
+  'havent',
+  'hasnt',
+  'hadnt',
+  'aint'
 ])
 const isNegation = (w: string): boolean => NEGATIONS.has(w) || w.endsWith("n't")
 
@@ -243,7 +263,11 @@ export function validateChanges(
   for (const c of changes) {
     const evidence: Evidence[] = []
     for (const e of c.evidence) {
-      const ref = e.line.trim().replace(/^\[|\]$/g, '').split(/\s/)[0].toUpperCase()
+      const ref = e.line
+        .trim()
+        .replace(/^\[|\]$/g, '')
+        .split(/\s/)[0]
+        .toUpperCase()
       const cited = segRef.get(ref)
       if (!cited) continue
       // the model sometimes cites the neighbouring line; check one line either side
@@ -262,7 +286,7 @@ export function validateChanges(
     }
 
     let op = c.op
-    const target = c.target_item ? itemRef.get(c.target_item.trim().toUpperCase()) ?? null : null
+    const target = c.target_item ? (itemRef.get(c.target_item.trim().toUpperCase()) ?? null) : null
     if (!target && (op === 'update' || op === 'close' || op === 'supersede')) op = 'create' // unknown target: treat as new
     if (op === 'flag' && c.category !== 'conflict') op = 'create'
 
@@ -343,8 +367,14 @@ async function runAnalysis(meetingId: string): Promise<Analysis> {
     `## Stakeholders\n${stakeholders.map((s) => `- ${s.name}${s.role ? ` (${s.role})` : ''}`).join('\n') || '(none listed)'}`,
     `## Current project state\n${itemText || '(empty: this is the first meeting, so everything relevant is new)'}`,
     `## Changes from previous meetings (most recent first)\n${
-      history.map((h) => `- ${h.date.slice(0, 10)} "${h.title}":\n${describeChanges(h.changes).map((l) => `  - ${l}`).join('\n')}`).join('\n') ||
-      '(none applied yet)'
+      history
+        .map(
+          (h) =>
+            `- ${h.date.slice(0, 10)} "${h.title}":\n${describeChanges(h.changes)
+              .map((l) => `  - ${l}`)
+              .join('\n')}`
+        )
+        .join('\n') || '(none applied yet)'
     }`,
     `## This meeting\nTitle: ${meeting.title}\nDate: ${meeting.startedAt.slice(0, 10)}`,
     marks.length ? `Moments the user marked as important: ${marks.map((m) => fmtTime(m.t)).join(', ')}` : '',
@@ -375,7 +405,8 @@ function staleReason(p: Proposal, target: Item | null): string | null {
   if (p.op === 'create' || p.op === 'flag') return null
   if (!target) return 'The item it changes was deleted.'
   // reports made before versions were recorded can only notice items that were replaced or cancelled
-  const changed = p.targetVersion !== null ? target.version !== p.targetVersion : target.status === 'superseded' || target.status === 'cancelled'
+  const changed =
+    p.targetVersion !== null ? target.version !== p.targetVersion : target.status === 'superseded' || target.status === 'cancelled'
   return changed ? `"${target.title}" has changed since this meeting was analyzed.` : null
 }
 
@@ -409,7 +440,14 @@ export function applyApproved(meetingId: string): ApplyResult {
       const target = p.targetItemId ? db.getItem(p.targetItemId) : null
 
       if (p.op === 'create') {
-        const it = db.createItem({ projectId: meeting.projectId, type: p.itemType, title: p.title, body: p.body, owner: p.owner, dueDate: p.dueDate })
+        const it = db.createItem({
+          projectId: meeting.projectId,
+          type: p.itemType,
+          title: p.title,
+          body: p.body,
+          owner: p.owner,
+          dueDate: p.dueDate
+        })
         hist(it.id, `Created (${p.category.replace('_', ' ')})`)
         changes.push({ op: 'create', itemId: it.id, itemType: it.type, title: it.title, after: it })
       } else if (p.op === 'update' && target) {
@@ -428,13 +466,34 @@ export function applyApproved(meetingId: string): ApplyResult {
       } else if (p.op === 'close' && target) {
         db.updateItem(target.id, { status: 'done' })
         hist(target.id, 'Closed / resolved')
-        changes.push({ op: 'close', itemId: target.id, itemType: target.type, title: target.title, before: { status: target.status }, after: { status: 'done' } })
+        changes.push({
+          op: 'close',
+          itemId: target.id,
+          itemType: target.type,
+          title: target.title,
+          before: { status: target.status },
+          after: { status: 'done' }
+        })
       } else if (p.op === 'supersede' && target) {
         db.updateItem(target.id, { status: 'superseded' })
-        const it = db.createItem({ projectId: meeting.projectId, type: p.itemType, title: p.title, body: p.body, owner: p.owner, dueDate: p.dueDate })
+        const it = db.createItem({
+          projectId: meeting.projectId,
+          type: p.itemType,
+          title: p.title,
+          body: p.body,
+          owner: p.owner,
+          dueDate: p.dueDate
+        })
         hist(target.id, `Superseded by "${it.title}"`)
         hist(it.id, `Created, replacing "${target.title}"`)
-        changes.push({ op: 'supersede', itemId: target.id, itemType: target.type, title: target.title, before: { status: target.status }, after: { status: 'superseded' } })
+        changes.push({
+          op: 'supersede',
+          itemId: target.id,
+          itemType: target.type,
+          title: target.title,
+          before: { status: target.status },
+          after: { status: 'superseded' }
+        })
         changes.push({ op: 'create', itemId: it.id, itemType: it.type, title: it.title, after: it })
       } else if (p.op === 'flag') {
         // a conflict becomes an open question that someone must resolve

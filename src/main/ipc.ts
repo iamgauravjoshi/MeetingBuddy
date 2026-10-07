@@ -28,7 +28,10 @@ const httpUrl = (s: string): boolean => {
 export const SETTINGS_FIELDS = {
   llmProvider,
   llmModel: z.string().max(200),
-  llmBaseUrl: z.string().max(2000).refine((s) => s === '' || httpUrl(s), 'Base URL must be an http(s) address'),
+  llmBaseUrl: z
+    .string()
+    .max(2000)
+    .refine((s) => s === '' || httpUrl(s), 'Base URL must be an http(s) address'),
   sttProvider,
   sttModel: z.string().max(200),
   autoDetect: z.boolean(),
@@ -45,7 +48,10 @@ export const SETTINGS_FIELDS = {
 export const API_ARGS = {
   getSettings: z.tuple([]),
   saveSettings: z.tuple([z.strictObject(SETTINGS_FIELDS).partial()]),
-  setSecret: z.tuple([z.enum(['anthropic', 'openai', 'google', 'openrouter', 'ollama', 'openai-compatible', 'deepgram', 'groq']), z.string().max(10_000)]),
+  setSecret: z.tuple([
+    z.enum(['anthropic', 'openai', 'google', 'openrouter', 'ollama', 'openai-compatible', 'deepgram', 'groq']),
+    z.string().max(10_000)
+  ]),
   testLlm: z.tuple([]),
 
   listProjects: z.tuple([]),
@@ -60,7 +66,10 @@ export const API_ARGS = {
 
   listItems: z.tuple([id]),
   createItem: z.tuple([z.strictObject({ projectId: id, type: itemType, title: short, body: long, owner: short, dueDate: short })]),
-  updateItem: z.tuple([id, z.strictObject({ title: short, body: long, status: itemStatus, owner: short, dueDate: short, type: itemType }).partial()]),
+  updateItem: z.tuple([
+    id,
+    z.strictObject({ title: short, body: long, status: itemStatus, owner: short, dueDate: short, type: itemType }).partial()
+  ]),
   deleteItem: z.tuple([id]),
   getItemHistory: z.tuple([id]),
   listStateVersions: z.tuple([id]),
@@ -88,7 +97,14 @@ export const API_ARGS = {
   updateProposal: z.tuple([
     id,
     z
-      .strictObject({ status: z.enum(['pending', 'accepted', 'rejected', 'applied']), title: short, body: long, owner: short, dueDate: short, itemType })
+      .strictObject({
+        status: z.enum(['pending', 'accepted', 'rejected', 'applied']),
+        title: short,
+        body: long,
+        owner: short,
+        dueDate: short,
+        itemType
+      })
       .partial()
   ]),
   applyApproved: z.tuple([id])

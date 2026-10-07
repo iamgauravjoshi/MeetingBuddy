@@ -64,7 +64,9 @@ export function App() {
     try {
       await r.recorder.stop()
       await api.stopRecording(r.meetingId)
-      setBanner(`${reason ? reason + ' ' : ''}Recording saved. Transcribing and analyzing in the background; you'll get a notification when the report is ready.`)
+      setBanner(
+        `${reason ? `${reason} ` : ''}Recording saved. Transcribing and analyzing in the background; you'll get a notification when the report is ready.`
+      )
     } catch (e) {
       // the audio is on disk either way; the meeting page offers to transcribe it
       setBanner(`Stopping the recording failed: ${errMsg(e)}`)
@@ -88,7 +90,8 @@ export function App() {
     setDetected(null)
     window.mb.setRecordingState({ active: true, meetingId: m.id, projectId, startedAt: Date.now() })
     if (recorder.warnings.length) setBanner(recorder.warnings.join(' '))
-    else if (s.sttProvider === 'none') setBanner('Recording audio. No speech-to-text provider is set, so add one in Settings to get a transcript.')
+    else if (s.sttProvider === 'none')
+      setBanner('Recording audio. No speech-to-text provider is set, so add one in Settings to get a transcript.')
     setView({ kind: 'meeting', meetingId: m.id })
   }, [])
 
@@ -116,17 +119,13 @@ export function App() {
   useEvent('meeting:ended', () => void stopRecording('The meeting app released the microphone.'), [stopRecording])
   useEvent('navigate:meeting', (id: string) => setView({ kind: 'meeting', meetingId: id }))
   // the user chose "Stop recording and quit": save the recording, then let main quit
-  useEvent(
-    'app:quit-requested',
-    async () => {
-      try {
-        await stopRecording('MeetingBuddy is quitting.')
-      } finally {
-        window.mb.quitReady()
-      }
-    },
-    [stopRecording]
-  )
+  useEvent('app:quit-requested', async () => {
+    try {
+      await stopRecording('MeetingBuddy is quitting.')
+    } finally {
+      window.mb.quitReady()
+    }
+  }, [stopRecording])
 
   useEffect(() => {
     if (!banner) return
@@ -145,7 +144,9 @@ export function App() {
         </div>
         <div className="side-section">
           Projects
-          <button className="btn ghost sm" title="New project" onClick={() => setNewProject(true)}>+ New</button>
+          <button className="btn ghost sm" title="New project" onClick={() => setNewProject(true)}>
+            + New
+          </button>
         </div>
         <div className="side-list">
           {projects.map((p) => (
@@ -157,7 +158,11 @@ export function App() {
               {p.name}
             </button>
           ))}
-          {projects.length === 0 && <div className="muted small" style={{ padding: 10 }}>No projects yet.</div>}
+          {projects.length === 0 && (
+            <div className="muted small" style={{ padding: 10 }}>
+              No projects yet.
+            </div>
+          )}
         </div>
         <div className="side-footer">
           <button className={`btn ${rec ? 'rec' : 'primary'}`} onClick={() => toggleRecording()} disabled={!rec && projects.length === 0}>
@@ -180,32 +185,51 @@ export function App() {
             <span className="muted">{rec.title}</span>
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtTime(rec.recorder.elapsed())}</span>
             <span className="grow" />
-            <button className="btn sm" onClick={() => setView({ kind: 'meeting', meetingId: rec.meetingId })}>Live transcript</button>
-            <button className="btn sm" onClick={markMoment} title={settings?.hotkeyMark}>★ Mark moment</button>
-            <button className="btn sm rec" onClick={() => void stopRecording()}>■ Stop</button>
+            <button className="btn sm" onClick={() => setView({ kind: 'meeting', meetingId: rec.meetingId })}>
+              Live transcript
+            </button>
+            <button className="btn sm" onClick={markMoment} title={settings?.hotkeyMark}>
+              ★ Mark moment
+            </button>
+            <button className="btn sm rec" onClick={() => void stopRecording()}>
+              ■ Stop
+            </button>
           </div>
         )}
         {detected && !rec && (
           <div className="banner">
             <b>Meeting detected:</b> {detected.app}
             <span className="grow" />
-            <button className="btn sm primary" onClick={() => setStartPrompt({ sourceApp: detected.app })}>Record</button>
-            <button className="btn sm ghost" onClick={() => setDetected(null)}>Ignore</button>
+            <button className="btn sm primary" onClick={() => setStartPrompt({ sourceApp: detected.app })}>
+              Record
+            </button>
+            <button className="btn sm ghost" onClick={() => setDetected(null)}>
+              Ignore
+            </button>
           </div>
         )}
         {banner && (
           <div className="banner">
             <span className="grow">{banner}</span>
-            <button className="btn sm ghost" onClick={() => setBanner(null)}>✕</button>
+            <button className="btn sm ghost" onClick={() => setBanner(null)}>
+              ✕
+            </button>
           </div>
         )}
         <div className="content">
           {view.kind === 'home' && (
             <div className="empty">
               <h2>Welcome to MeetingBuddy</h2>
-              <p>Create a project, add what you already know (requirements, decisions, tasks, risks, deadlines), then record or import a meeting.</p>
-              <p>MeetingBuddy will tell you <b>what changed in the project because of the meeting</b>.</p>
-              <button className="btn primary" onClick={() => setNewProject(true)}>Create your first project</button>
+              <p>
+                Create a project, add what you already know (requirements, decisions, tasks, risks, deadlines), then record or import a
+                meeting.
+              </p>
+              <p>
+                MeetingBuddy will tell you <b>what changed in the project because of the meeting</b>.
+              </p>
+              <button className="btn primary" onClick={() => setNewProject(true)}>
+                Create your first project
+              </button>
             </div>
           )}
           {view.kind === 'project' && (
@@ -270,7 +294,7 @@ function StartRecordingModal(props: {
 }) {
   const [pid, setPid] = useState(props.defaultProjectId ?? '')
   const today = new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  const [title, setTitle] = useState(`${props.sourceApp ? props.sourceApp.replace(/ \(.*\)/, '') + ' meeting' : 'Meeting'} · ${today}`)
+  const [title, setTitle] = useState(`${props.sourceApp ? `${props.sourceApp.replace(/ \(.*\)/, '')} meeting` : 'Meeting'} · ${today}`)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -287,7 +311,9 @@ function StartRecordingModal(props: {
       onClose={props.onClose}
       footer={
         <>
-          <button className="btn" onClick={props.onClose}>Cancel</button>
+          <button className="btn" onClick={props.onClose}>
+            Cancel
+          </button>
           <button
             className="btn rec"
             disabled={busy || !pid}
@@ -310,7 +336,9 @@ function StartRecordingModal(props: {
       <Field label="Project">
         <select className="input" value={pid} onChange={(e) => setPid(e.target.value)}>
           {props.projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
           ))}
         </select>
       </Field>
@@ -318,8 +346,8 @@ function StartRecordingModal(props: {
         <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       </Field>
       <p className="muted small">
-        MeetingBuddy records your microphone and your computer's audio output (the other participants), with no bot joining the call.
-        Let participants know the meeting is being recorded.
+        MeetingBuddy records your microphone and your computer's audio output (the other participants), with no bot joining the call. Let
+        participants know the meeting is being recorded.
       </p>
       <ErrorBox error={error} />
     </Modal>
@@ -336,7 +364,9 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
           <button
             className="btn primary"
             disabled={!name.trim() || busy}
@@ -351,7 +381,13 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
       </Field>
       <Field label="Description, goals and context">
-        <textarea className="input" rows={5} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What is this project? Who is it for? What does success look like?" />
+        <textarea
+          className="input"
+          rows={5}
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          placeholder="What is this project? Who is it for? What does success look like?"
+        />
       </Field>
       <ErrorBox error={error} />
     </Modal>

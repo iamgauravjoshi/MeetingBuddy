@@ -1,4 +1,4 @@
-import type { RecordingState } from '@shared/types'
+import type { MainEvents, RecordingState } from '@shared/types'
 
 declare global {
   interface Window {
@@ -8,8 +8,7 @@ declare global {
       setRecordingState: (s: RecordingState) => void
       /** Tells main the recording is saved and it can finish quitting. */
       quitReady: () => void
-      on: (channel: string, cb: (...args: any[]) => void) => () => void
+      on: <K extends keyof MainEvents>(channel: K, cb: (...args: MainEvents[K]) => void) => () => void
     }
   }
 }
-export {}

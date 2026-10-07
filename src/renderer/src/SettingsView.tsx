@@ -55,7 +55,10 @@ export function SettingsView({ onSaved }: { onSaved: (s: Settings) => void }) {
 
       <div className="card col">
         <h2>AI model for impact analysis</h2>
-        <p className="muted small">Bring your own key. Keys are encrypted with Windows' built-in protection and never leave this computer, except in requests to the provider you choose.</p>
+        <p className="muted small">
+          Bring your own key. Keys are encrypted with Windows' built-in protection and never leave this computer, except in requests to the
+          provider you choose.
+        </p>
         <Field label="Provider">
           <select
             className="input"
@@ -65,19 +68,36 @@ export function SettingsView({ onSaved }: { onSaved: (s: Settings) => void }) {
               update({ llmProvider: p, llmModel: DEFAULT_MODELS[p] })
             }}
           >
-            {LLM_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            {LLM_PROVIDERS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
           </select>
         </Field>
         <div className="muted small">{llm.hint}</div>
-        <Field label="Model"><input className="input" value={s.llmModel} onChange={(e) => update({ llmModel: e.target.value })} /></Field>
+        <Field label="Model">
+          <input className="input" value={s.llmModel} onChange={(e) => update({ llmModel: e.target.value })} />
+        </Field>
         {(s.llmProvider === 'ollama' || s.llmProvider === 'openai-compatible') && (
           <Field label="Base URL">
-            <input className="input" value={s.llmBaseUrl} placeholder={s.llmProvider === 'ollama' ? 'http://localhost:11434/v1' : 'http://localhost:1234/v1'} onChange={(e) => update({ llmBaseUrl: e.target.value })} />
+            <input
+              className="input"
+              value={s.llmBaseUrl}
+              placeholder={s.llmProvider === 'ollama' ? 'http://localhost:11434/v1' : 'http://localhost:1234/v1'}
+              onChange={(e) => update({ llmBaseUrl: e.target.value })}
+            />
           </Field>
         )}
         {s.llmProvider !== 'ollama' && (
           <Field label={`API key ${s.hasKey[s.llmProvider] ? '(saved; leave blank to keep it)' : ''}`}>
-            <input className="input" type="password" value={llmKey} onChange={(e) => setLlmKey(e.target.value)} placeholder={s.hasKey[s.llmProvider] ? '••••••••' : 'Paste key'} />
+            <input
+              className="input"
+              type="password"
+              value={llmKey}
+              onChange={(e) => setLlmKey(e.target.value)}
+              placeholder={s.hasKey[s.llmProvider] ? '••••••••' : 'Paste key'}
+            />
           </Field>
         )}
         <div className="row">
@@ -116,19 +136,42 @@ export function SettingsView({ onSaved }: { onSaved: (s: Settings) => void }) {
       <div className="card col">
         <h2>Speech-to-text</h2>
         <Field label="Provider">
-          <select className="input" value={s.sttProvider} onChange={(e) => update({ sttProvider: e.target.value as SttProvider, sttModel: '' })}>
-            {STT_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          <select
+            className="input"
+            value={s.sttProvider}
+            onChange={(e) => update({ sttProvider: e.target.value as SttProvider, sttModel: '' })}
+          >
+            {STT_PROVIDERS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
           </select>
         </Field>
         {stt.hint && <div className="muted small">{stt.hint}</div>}
         {s.sttProvider !== 'none' && (
           <>
-            <Field label="Model (blank = default)"><input className="input" value={s.sttModel} onChange={(e) => update({ sttModel: e.target.value })} /></Field>
+            <Field label="Model (blank = default)">
+              <input className="input" value={s.sttModel} onChange={(e) => update({ sttModel: e.target.value })} />
+            </Field>
             <Field label={`API key ${s.hasKey[s.sttProvider] ? '(saved; leave blank to keep it)' : ''}`}>
-              <input className="input" type="password" value={sttKey} onChange={(e) => setSttKey(e.target.value)} placeholder={s.hasKey[s.sttProvider] ? '••••••••' : 'Paste key'} />
+              <input
+                className="input"
+                type="password"
+                value={sttKey}
+                onChange={(e) => setSttKey(e.target.value)}
+                placeholder={s.hasKey[s.sttProvider] ? '••••••••' : 'Paste key'}
+              />
             </Field>
             <Field label="Live transcript chunk length in seconds (0 = no live transcript; transcribe only after the meeting)">
-              <input className="input" type="number" min={0} max={120} value={s.chunkSeconds} onChange={(e) => update({ chunkSeconds: Math.max(0, Number(e.target.value)) })} />
+              <input
+                className="input"
+                type="number"
+                min={0}
+                max={120}
+                value={s.chunkSeconds}
+                onChange={(e) => update({ chunkSeconds: Math.max(0, Number(e.target.value)) })}
+              />
             </Field>
           </>
         )}
@@ -144,10 +187,20 @@ export function SettingsView({ onSaved }: { onSaved: (s: Settings) => void }) {
           Detect meetings automatically (Zoom, Teams, Meet in the browser, Slack, Discord, Webex…) and offer to record
         </label>
         <div className="row">
-          <div className="grow"><Field label="Start / stop recording"><input className="input" value={s.hotkeyRecord} onChange={(e) => update({ hotkeyRecord: e.target.value })} /></Field></div>
-          <div className="grow"><Field label="Mark important moment"><input className="input" value={s.hotkeyMark} onChange={(e) => update({ hotkeyMark: e.target.value })} /></Field></div>
+          <div className="grow">
+            <Field label="Start / stop recording">
+              <input className="input" value={s.hotkeyRecord} onChange={(e) => update({ hotkeyRecord: e.target.value })} />
+            </Field>
+          </div>
+          <div className="grow">
+            <Field label="Mark important moment">
+              <input className="input" value={s.hotkeyMark} onChange={(e) => update({ hotkeyMark: e.target.value })} />
+            </Field>
+          </div>
         </div>
-        <div className="muted small">Format: Electron accelerators, e.g. CommandOrControl+Shift+M or Alt+F9. Hotkeys work even when MeetingBuddy is in the tray.</div>
+        <div className="muted small">
+          Format: Electron accelerators, e.g. CommandOrControl+Shift+M or Alt+F9. Hotkeys work even when MeetingBuddy is in the tray.
+        </div>
       </div>
 
       <div className="row">

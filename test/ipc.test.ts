@@ -91,7 +91,13 @@ describe('external links', () => {
   it('open only http and https links', () => {
     expect(isSafeExternalUrl('https://console.anthropic.com')).toBe(true)
     expect(isSafeExternalUrl('http://example.com')).toBe(true)
-    for (const url of ['file:///C:/Windows/System32/calc.exe', 'javascript:alert(1)', 'ms-settings:privacy', 'smb://host/share', 'nonsense']) {
+    for (const url of [
+      'file:///C:/Windows/System32/calc.exe',
+      'javascript:alert(1)',
+      'ms-settings:privacy',
+      'smb://host/share',
+      'nonsense'
+    ]) {
       expect(isSafeExternalUrl(url)).toBe(false)
     }
   })

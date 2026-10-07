@@ -9,7 +9,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "start": "electron-vite preview",
     "dist:win": "electron-vite build && electron-builder --win",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome ci ."
   },
   "author": "MeetingBuddy",
   "license": "UNLICENSED",
@@ -20,11 +23,10 @@
     "@ai-sdk/openai": "^4.0.86",
     "@ai-sdk/openai-compatible": "^3.0.65",
     "ai": "^7.0.130",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.4",
@@ -35,6 +37,8 @@
     "electron-builder": "^26.17.0",
     "electron-vite": "^5.0.0",
     "jsdom": "^30.1.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "typescript": "^7.0.2",
     "vite": "^7.3.7",
     "vitest": "^5.0.3"

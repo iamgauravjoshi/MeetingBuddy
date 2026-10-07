@@ -1,13 +1,6 @@
 // Types shared by the main process, preload and renderer.
 
-export const ITEM_TYPES = [
-  'requirement',
-  'decision',
-  'task',
-  'risk',
-  'deadline',
-  'question'
-] as const
+export const ITEM_TYPES = ['requirement', 'decision', 'task', 'risk', 'deadline', 'question'] as const
 export type ItemType = (typeof ITEM_TYPES)[number]
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
@@ -209,3 +202,31 @@ export interface RecordingState {
   projectId: string | null
   startedAt: number | null
 }
+
+// ---------- Main → renderer events ----------
+
+/** Events the main process sends to the renderer, with their arguments. */
+export interface MainEvents {
+  'hotkey:record': [sourceApp: string]
+  'hotkey:mark': []
+  'meeting:detected': [meeting: DetectedMeeting]
+  'meeting:ended': []
+  'meeting:changed': [meetingId: string]
+  'transcript:appended': [meetingId: string, added: Segment[]]
+  'navigate:meeting': [meetingId: string]
+  'app:quit-requested': []
+}
+
+// a Record must name every event exactly once, so the preload's allow-list can't drift from MainEvents
+const EVENT_NAMES: Record<keyof MainEvents, true> = {
+  'hotkey:record': true,
+  'hotkey:mark': true,
+  'meeting:detected': true,
+  'meeting:ended': true,
+  'meeting:changed': true,
+  'transcript:appended': true,
+  'navigate:meeting': true,
+  'app:quit-requested': true
+}
+/** The channels the preload lets the renderer subscribe to. */
+export const MAIN_EVENTS = Object.keys(EVENT_NAMES) as (keyof MainEvents)[]

@@ -1,4 +1,17 @@
-import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, session, shell, Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeImage,
+  Notification,
+  session,
+  shell,
+  Tray
+} from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { openDb, recoverInterruptedMeetings } from './db'

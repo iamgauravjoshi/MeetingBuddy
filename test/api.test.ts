@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -103,8 +102,21 @@ describe('proposal edits', () => {
     const m = db.createMeeting(p.id, 'M', 'analyzed')
     db.saveReport(m.id, 'mock', 'summary', 0, [
       {
-        category: 'decision', op: 'create', targetItemId: null, targetVersion: null, itemType: 'decision', title: 'Use Postgres', body: '',
-        owner: '', dueDate: '', speaker: 'Priya', strength: 'firm', confidence: 0.9, impact: 'high', rationale: '', evidence: []
+        category: 'decision',
+        op: 'create',
+        targetItemId: null,
+        targetVersion: null,
+        itemType: 'decision',
+        title: 'Use Postgres',
+        body: '',
+        owner: '',
+        dueDate: '',
+        speaker: 'Priya',
+        strength: 'firm',
+        confidence: 0.9,
+        impact: 'high',
+        rationale: '',
+        evidence: []
       }
     ])
     return db.getReport(m.id)!.proposals[0]

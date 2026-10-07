@@ -62,7 +62,14 @@ describe('creating a project', () => {
 
 describe('project page', () => {
   const view = (overrides: Record<string, (...a: any[]) => unknown> = {}) => {
-    fakeMb({ getProject: () => PROJECT, listItems: () => [ITEM], getItemHistory: () => [], listMeetings: () => [], listStakeholders: () => [], ...overrides })
+    fakeMb({
+      getProject: () => PROJECT,
+      listItems: () => [ITEM],
+      getItemHistory: () => [],
+      listMeetings: () => [],
+      listStakeholders: () => [],
+      ...overrides
+    })
     render(<ProjectView projectId="p1" onOpenMeeting={() => {}} onRecord={() => {}} onProjectsChanged={() => {}} />)
   }
 
@@ -92,7 +99,10 @@ describe('project page', () => {
   })
 
   it('shows why removing a stakeholder failed', async () => {
-    view({ listStakeholders: () => [{ id: 'st1', projectId: 'p1', name: 'Priya', role: '', email: '' }], deleteStakeholder: fail('Database is locked') })
+    view({
+      listStakeholders: () => [{ id: 'st1', projectId: 'p1', name: 'Priya', role: '', email: '' }],
+      deleteStakeholder: fail('Database is locked')
+    })
     fireEvent.click(await screen.findByText('Stakeholders'))
     fireEvent.click(await screen.findByText('Remove'))
     expect(await screen.findByText('Database is locked')).toBeTruthy()
@@ -140,5 +150,66 @@ describe('settings page', () => {
     render(<SettingsView onSaved={() => {}} />)
     fireEvent.click(await screen.findByText('Remove saved key'))
     expect(await screen.findByText('OS encryption is not available')).toBeTruthy()
+  })
+})
+
+describe('accept all firm', () => {
+  it('leaves changes that close or replace items for an explicit decision', async () => {
+    const proposals = [
+      { ...REPORT.proposals[0], id: 'a', title: 'New decision' },
+      { ...REPORT.proposals[0], id: 'b', title: 'Close task', op: 'close' as const, targetItemId: 'i1', targetVersion: 1 },
+      { ...REPORT.proposals[0], id: 'c', title: 'Replace decision', op: 'supersede' as const, targetItemId: 'i1', targetVersion: 1 }
+    ]
+    const invoke = fakeMb({
+      getMeeting: () => MEETING,
+      getTranscript: () => ({ segments: [SEGMENT], marks: [] }),
+      getReport: () => ({ ...REPORT, proposals }),
+      listItems: () => [ITEM],
+      listStakeholders: () => [],
+      hasRecording: () => false,
+      updateProposal: () => undefined
+    })
+    render(<MeetingView meetingId="m1" live={false} onLoaded={() => {}} onBack={() => {}} onOpenProject={() => {}} />)
+    fireEvent.click(await screen.findByText('Accept all firm'))
+    await screen.findByText(/Accept all firm/)
+    await act(async () => {})
+    expect(invoke.mock.calls.filter(([name]) => name === 'updateProposal').map(([, id]) => id)).toEqual(['a'])
+  })
+})
+
+describe('keyboard access', () => {
+  it('opens an item with Enter', async () => {
+    fakeMb({ getProject: () => PROJECT, listItems: () => [ITEM], getItemHistory: () => [] })
+    render(<ProjectView projectId="p1" onOpenMeeting={() => {}} onRecord={() => {}} onProjectsChanged={() => {}} />)
+    const card = await screen.findByRole('button', { name: /Use Firebase/ })
+    expect(card.tabIndex).toBe(0)
+    fireEvent.keyDown(card, { key: 'Enter' })
+    expect(await screen.findByText('Edit item')).toBeTruthy()
+  })
+
+  it('opens a meeting from the list with Space', async () => {
+    const onOpen = vi.fn()
+    fakeMb({ getProject: () => PROJECT, listItems: () => [], listMeetings: () => [MEETING] })
+    render(<ProjectView projectId="p1" initialTab="meetings" onOpenMeeting={onOpen} onRecord={() => {}} onProjectsChanged={() => {}} />)
+    fireEvent.keyDown(await screen.findByRole('button', { name: /Weekly sync/ }), { key: ' ' })
+    expect(onOpen).toHaveBeenCalledWith('m1')
+  })
+
+  it('reaches evidence quotes and the meeting title from the keyboard', async () => {
+    fakeMb({
+      getMeeting: () => MEETING,
+      getTranscript: () => ({ segments: [SEGMENT], marks: [] }),
+      getReport: () => REPORT,
+      listItems: () => [],
+      listStakeholders: () => [],
+      hasRecording: () => false
+    })
+    render(<MeetingView meetingId="m1" live={false} onLoaded={() => {}} onBack={() => {}} onOpenProject={() => {}} />)
+    expect(await screen.findByRole('button', { name: /We will use Postgres/ })).toBeTruthy()
+    // the title is a native <button>: browsers activate it with Enter/Space themselves (jsdom doesn't emulate that)
+    const title = screen.getByRole('button', { name: 'Weekly sync' })
+    expect(title.tagName).toBe('BUTTON')
+    fireEvent.click(title)
+    expect(await screen.findByText('Rename meeting')).toBeTruthy()
   })
 })

@@ -12,7 +12,7 @@ import {
   type Stakeholder
 } from '@shared/types'
 import { api, errMsg } from './api'
-import { ErrorBox, Field, fmtDate, fmtTime, Modal, useAction, useEvent } from './ui'
+import { clickable, ErrorBox, Field, fmtDate, fmtTime, Modal, useAction, useEvent } from './ui'
 
 const OP_BADGE: Record<Proposal['op'], [string, string]> = {
   create: ['NEW', 'green'],
@@ -57,19 +57,20 @@ export function MeetingView(props: {
   const [skipped, setSkipped] = useState<{ proposalId: string; title: string; reason: string }[]>([])
   const transcriptRef = useRef<HTMLDivElement>(null)
 
+  const { meetingId, onLoaded } = props
   const load = useCallback(async () => {
-    const m = await api.getMeeting(props.meetingId)
+    const m = await api.getMeeting(meetingId)
     if (!m) return
     setMeeting(m)
-    props.onLoaded(m.projectId)
-    const t = await api.getTranscript(props.meetingId)
+    onLoaded(m.projectId)
+    const t = await api.getTranscript(meetingId)
     setSegments(t.segments)
     setMarks(t.marks)
-    setReport(await api.getReport(props.meetingId))
+    setReport(await api.getReport(meetingId))
     setItems(await api.listItems(m.projectId))
     setStakeholders(await api.listStakeholders(m.projectId))
-    setHasAudio(await api.hasRecording(props.meetingId))
-  }, [props.meetingId])
+    setHasAudio(await api.hasRecording(meetingId))
+  }, [meetingId, onLoaded])
   useEffect(() => void load(), [load])
   useEvent('meeting:changed', (id: string) => id === props.meetingId && void load(), [load])
   useEvent(
@@ -126,25 +127,53 @@ export function MeetingView(props: {
   return (
     <div className="col" style={{ gap: 12 }}>
       <div className="header" style={{ marginBottom: 0 }}>
-        <button className="btn ghost" onClick={() => props.onBack(meeting.projectId)}>← Meetings</button>
+        <button className="btn ghost" onClick={() => props.onBack(meeting.projectId)}>
+          ← Meetings
+        </button>
         <div>
-          <h1 style={{ cursor: 'pointer' }} title="Rename" onClick={() => setRenaming(true)}>{meeting.title}</h1>
+          <h1>
+            <button className="text-btn" title="Rename" onClick={() => setRenaming(true)}>
+              {meeting.title}
+            </button>
+          </h1>
           <div className="muted small">
             {fmtDate(meeting.startedAt)}
             {meeting.sourceApp && meeting.sourceApp !== 'import' && ` · ${meeting.sourceApp}`} · {segments.length} transcript lines
-            {props.live && <span className="badge red" style={{ marginLeft: 8 }}>LIVE</span>}
-            {meeting.status === 'transcribing' && <span className="badge amber" style={{ marginLeft: 8 }}>Processing…</span>}
-            {analyzing && <span className="badge amber" style={{ marginLeft: 8 }}>Analyzing…</span>}
+            {props.live && (
+              <span className="badge red" style={{ marginLeft: 8 }}>
+                LIVE
+              </span>
+            )}
+            {meeting.status === 'transcribing' && (
+              <span className="badge amber" style={{ marginLeft: 8 }}>
+                Processing…
+              </span>
+            )}
+            {analyzing && (
+              <span className="badge amber" style={{ marginLeft: 8 }}>
+                Analyzing…
+              </span>
+            )}
           </div>
         </div>
         <span className="spacer" />
-        {speakers.length > 0 && <button className="btn" onClick={() => setMapSpeakers(true)}>Map speakers</button>}
+        {speakers.length > 0 && (
+          <button className="btn" onClick={() => setMapSpeakers(true)}>
+            Map speakers
+          </button>
+        )}
         <button
           className="btn primary"
           disabled={!canAnalyze || !!busy}
           title={applied ? "This meeting's changes are applied to the project, so it can't be re-analyzed." : undefined}
           onClick={() => {
-            if (reviewed > 0 && !confirm(`Re-analyzing replaces this report. Your decisions on ${reviewed} proposed change${reviewed === 1 ? '' : 's'} will be lost.`)) return
+            if (
+              reviewed > 0 &&
+              !confirm(
+                `Re-analyzing replaces this report. Your decisions on ${reviewed} proposed change${reviewed === 1 ? '' : 's'} will be lost.`
+              )
+            )
+              return
             void run('Analyzing meeting against project state…', () => api.analyzeMeeting(meeting.id))
           }}
         >
@@ -169,7 +198,11 @@ export function MeetingView(props: {
         <div className="error row">
           <span className="grow">{meeting.error}</span>
           {hasAudio && (
-            <button className="btn sm" disabled={!!busy} onClick={() => void run('Starting transcription…', () => api.transcribeRecording(meeting.id))}>
+            <button
+              className="btn sm"
+              disabled={!!busy}
+              onClick={() => void run('Starting transcription…', () => api.transcribeRecording(meeting.id))}
+            >
               Transcribe recording
             </button>
           )}
@@ -179,8 +212,8 @@ export function MeetingView(props: {
       {skipped.length > 0 && (
         <div className="error">
           <b>
-            {skipped.length} approved change{skipped.length === 1 ? ' was' : 's were'} not applied because the project changed since this meeting
-            was analyzed:
+            {skipped.length} approved change{skipped.length === 1 ? ' was' : 's were'} not applied because the project changed since this
+            meeting was analyzed:
           </b>
           {skipped.map((s) => (
             <div key={s.proposalId} className="small">
@@ -196,7 +229,11 @@ export function MeetingView(props: {
           <h2>Transcript</h2>
           <div className="transcript card" ref={transcriptRef}>
             {segments.map((s) => (
-              <div key={s.id} id={`seg-${s.id}`} className={`seg ${highlight === s.id ? 'hl' : ''} ${markedSegs.has(s.id) ? 'marked' : ''}`}>
+              <div
+                key={s.id}
+                id={`seg-${s.id}`}
+                className={`seg ${highlight === s.id ? 'hl' : ''} ${markedSegs.has(s.id) ? 'marked' : ''}`}
+              >
                 <div className="seg-time">{fmtTime(s.tStart)}</div>
                 <div>
                   <div className="seg-speaker">{s.speaker}</div>
@@ -224,11 +261,14 @@ export function MeetingView(props: {
                 <button
                   className="btn sm"
                   disabled={pending === 0 || !!busy}
-                  title="Accept every firm, evidence-backed change with confidence of at least 0.7"
+                  title="Accept every firm, evidence-backed change with confidence of at least 0.7. Changes that close or replace an item always need your own click."
                   onClick={() =>
                     void run('Accepting firm changes…', async () => {
                       for (const p of proposals) {
-                        if (p.status === 'pending' && p.strength === 'firm' && p.confidence >= 0.7) await api.updateProposal(p.id, { status: 'accepted' })
+                        // closing or replacing an item removes it from the project state, so those are never bulk-accepted
+                        const bulk =
+                          p.status === 'pending' && p.strength === 'firm' && p.confidence >= 0.7 && p.op !== 'close' && p.op !== 'supersede'
+                        if (bulk) await api.updateProposal(p.id, { status: 'accepted' })
                       }
                     })
                   }
@@ -263,7 +303,9 @@ export function MeetingView(props: {
             {report && (
               <>
                 <div className="summary">
-                  <div className="small muted" style={{ marginBottom: 4 }}>What changed · {report.report.model}</div>
+                  <div className="small muted" style={{ marginBottom: 4 }}>
+                    What changed · {report.report.model}
+                  </div>
                   {report.report.summary}
                   <div className="small muted" style={{ marginTop: 6 }}>
                     {proposals.length} proposed change{proposals.length === 1 ? '' : 's'} · {pending} pending · {accepted} accepted
@@ -275,7 +317,9 @@ export function MeetingView(props: {
                   if (!list.length) return null
                   return (
                     <div key={cat} className="col">
-                      <h3>{CATEGORY_LABELS[cat]} <span className="muted small">{list.length}</span></h3>
+                      <h3>
+                        {CATEGORY_LABELS[cat]} <span className="muted small">{list.length}</span>
+                      </h3>
                       {list.map((p) => (
                         <ProposalCard
                           key={p.id}
@@ -293,7 +337,9 @@ export function MeetingView(props: {
                 {meeting.status === 'applied' && (
                   <div className="row">
                     <span className="muted small">Approved changes are applied to the project state.</span>
-                    <button className="btn sm" onClick={() => props.onOpenProject(meeting.projectId)}>View project state</button>
+                    <button className="btn sm" onClick={() => props.onOpenProject(meeting.projectId)}>
+                      View project state
+                    </button>
                   </div>
                 )}
               </>
@@ -347,18 +393,30 @@ function ProposalCard(props: {
         <span className="muted small">{p.itemType}</span>
         <b className="grow">{p.title}</b>
         <span className={`badge ${p.impact === 'high' ? 'red' : p.impact === 'medium' ? 'amber' : ''}`}>{p.impact}</span>
-        {p.strength === 'tentative' && <span className="badge amber" title="Hedged statement, not a firm commitment">tentative</span>}
-        <span className="muted small" title="Model confidence">{Math.round(p.confidence * 100)}%</span>
+        {p.strength === 'tentative' && (
+          <span className="badge amber" title="Hedged statement, not a firm commitment">
+            tentative
+          </span>
+        )}
+        <span className="muted small" title="Model confidence">
+          {Math.round(p.confidence * 100)}%
+        </span>
       </div>
       {target && (
         <div className="small">
           <span className="muted">{p.op === 'flag' ? 'Conflicts with' : p.op === 'supersede' ? 'Replaces' : 'Existing item'}: </span>
           <span className={p.op === 'supersede' ? 'diff-old' : ''}>{target.title}</span>
           {p.op === 'update' && target.dueDate && p.dueDate && target.dueDate !== p.dueDate && (
-            <span> · due <span className="diff-old">{target.dueDate}</span> → {p.dueDate}</span>
+            <span>
+              {' '}
+              · due <span className="diff-old">{target.dueDate}</span> → {p.dueDate}
+            </span>
           )}
           {p.op === 'update' && target.owner && p.owner && target.owner !== p.owner && (
-            <span> · owner <span className="diff-old">{target.owner}</span> → {p.owner}</span>
+            <span>
+              {' '}
+              · owner <span className="diff-old">{target.owner}</span> → {p.owner}
+            </span>
           )}
         </div>
       )}
@@ -370,22 +428,38 @@ function ProposalCard(props: {
       </div>
       {p.rationale && <div className="small muted">{p.rationale}</div>}
       {p.evidence.map((e, i) => (
-        <div key={i} className="quote small" onClick={() => props.onJump(e.segmentId)} title="Show in transcript">
-          “{e.quote}” <span className="muted">— {e.speaker} @ {fmtTime(e.t)}</span>
+        // biome-ignore lint/suspicious/noArrayIndexKey: a proposal's evidence list never changes or reorders
+        <div key={i} className="quote small" title="Show in transcript" {...clickable(() => props.onJump(e.segmentId))}>
+          “{e.quote}”{' '}
+          <span className="muted">
+            — {e.speaker} @ {fmtTime(e.t)}
+          </span>
         </div>
       ))}
       {!applied && (
         <div className="row">
-          <button className={`btn sm ${p.status === 'accepted' ? 'success' : ''}`} onClick={() => props.onStatus(p.status === 'accepted' ? 'pending' : 'accepted')}>
+          <button
+            className={`btn sm ${p.status === 'accepted' ? 'success' : ''}`}
+            onClick={() => props.onStatus(p.status === 'accepted' ? 'pending' : 'accepted')}
+          >
             ✓ {p.status === 'accepted' ? 'Accepted' : 'Accept'}
           </button>
-          <button className="btn sm" onClick={() => setEditing(true)}>Edit</button>
-          <button className={`btn sm ${p.status === 'rejected' ? 'danger' : ''}`} onClick={() => props.onStatus(p.status === 'rejected' ? 'pending' : 'rejected')}>
+          <button className="btn sm" onClick={() => setEditing(true)}>
+            Edit
+          </button>
+          <button
+            className={`btn sm ${p.status === 'rejected' ? 'danger' : ''}`}
+            onClick={() => props.onStatus(p.status === 'rejected' ? 'pending' : 'rejected')}
+          >
             ✕ {p.status === 'rejected' ? 'Rejected' : 'Reject'}
           </button>
         </div>
       )}
-      {applied && <span className="badge blue" style={{ alignSelf: 'flex-start' }}>applied to project</span>}
+      {applied && (
+        <span className="badge blue" style={{ alignSelf: 'flex-start' }}>
+          applied to project
+        </span>
+      )}
       {editing && (
         <EditProposalModal
           p={p}
@@ -403,8 +477,18 @@ function ProposalCard(props: {
 
 // The dialogs below save through useAction: on failure they stay open and show why.
 
-function EditProposalModal(props: { p: Proposal; onClose: () => void; onSave: (patch: Pick<Proposal, 'title' | 'body' | 'owner' | 'dueDate' | 'itemType'>) => Promise<void> }) {
-  const [f, setF] = useState({ title: props.p.title, body: props.p.body, owner: props.p.owner, dueDate: props.p.dueDate, itemType: props.p.itemType })
+function EditProposalModal(props: {
+  p: Proposal
+  onClose: () => void
+  onSave: (patch: Pick<Proposal, 'title' | 'body' | 'owner' | 'dueDate' | 'itemType'>) => Promise<void>
+}) {
+  const [f, setF] = useState({
+    title: props.p.title,
+    body: props.p.body,
+    owner: props.p.owner,
+    dueDate: props.p.dueDate,
+    itemType: props.p.itemType
+  })
   const { run, busy, error } = useAction()
   return (
     <Modal
@@ -412,28 +496,51 @@ function EditProposalModal(props: { p: Proposal; onClose: () => void; onSave: (p
       onClose={props.onClose}
       footer={
         <>
-          <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" disabled={busy} onClick={() => void run(() => props.onSave(f))}>Save & accept</button>
+          <button className="btn" onClick={props.onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" disabled={busy} onClick={() => void run(() => props.onSave(f))}>
+            Save & accept
+          </button>
         </>
       }
     >
       <Field label="Item type">
         <select className="input" value={f.itemType} onChange={(e) => setF({ ...f, itemType: e.target.value as Proposal['itemType'] })}>
-          {ITEM_TYPES.map((t) => <option key={t}>{t}</option>)}
+          {ITEM_TYPES.map((t) => (
+            <option key={t}>{t}</option>
+          ))}
         </select>
       </Field>
-      <Field label="Title"><input className="input" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></Field>
-      <Field label="Details"><textarea className="input" rows={4} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} /></Field>
+      <Field label="Title">
+        <input className="input" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+      </Field>
+      <Field label="Details">
+        <textarea className="input" rows={4} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} />
+      </Field>
       <div className="row">
-        <div className="grow"><Field label="Owner"><input className="input" value={f.owner} onChange={(e) => setF({ ...f, owner: e.target.value })} /></Field></div>
-        <div className="grow"><Field label="Due date"><input className="input" value={f.dueDate} placeholder="YYYY-MM-DD" onChange={(e) => setF({ ...f, dueDate: e.target.value })} /></Field></div>
+        <div className="grow">
+          <Field label="Owner">
+            <input className="input" value={f.owner} onChange={(e) => setF({ ...f, owner: e.target.value })} />
+          </Field>
+        </div>
+        <div className="grow">
+          <Field label="Due date">
+            <input className="input" value={f.dueDate} placeholder="YYYY-MM-DD" onChange={(e) => setF({ ...f, dueDate: e.target.value })} />
+          </Field>
+        </div>
       </div>
       <ErrorBox error={error} />
     </Modal>
   )
 }
 
-function SpeakerMapModal(props: { speakers: string[]; stakeholders: Stakeholder[]; onClose: () => void; onSave: (map: Record<string, string>) => Promise<void> }) {
+function SpeakerMapModal(props: {
+  speakers: string[]
+  stakeholders: Stakeholder[]
+  onClose: () => void
+  onSave: (map: Record<string, string>) => Promise<void>
+}) {
   const [map, setMap] = useState<Record<string, string>>(Object.fromEntries(props.speakers.map((s) => [s, s])))
   const { run, busy, error } = useAction()
   return (
@@ -442,20 +549,35 @@ function SpeakerMapModal(props: { speakers: string[]; stakeholders: Stakeholder[
       onClose={props.onClose}
       footer={
         <>
-          <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" disabled={busy} onClick={() => void run(() => props.onSave(map))}>Save</button>
+          <button className="btn" onClick={props.onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" disabled={busy} onClick={() => void run(() => props.onSave(map))}>
+            Save
+          </button>
         </>
       }
     >
-      <p className="muted small">Speech-to-text labels voices as "Speaker 1", "Speaker 2"… Give them real names so the report attributes statements and owners correctly. Re-analyze afterwards.</p>
+      <p className="muted small">
+        Speech-to-text labels voices as "Speaker 1", "Speaker 2"… Give them real names so the report attributes statements and owners
+        correctly. Re-analyze afterwards.
+      </p>
       <datalist id="stakeholder-names">
-        {props.stakeholders.map((s) => <option key={s.id} value={s.name} />)}
+        {props.stakeholders.map((s) => (
+          <option key={s.id} value={s.name} />
+        ))}
       </datalist>
       {props.speakers.map((s) => (
         <div key={s} className="row">
           <span style={{ width: 140 }}>{s}</span>
           <span className="muted">→</span>
-          <input className="input grow" style={{ width: 'auto' }} list="stakeholder-names" value={map[s]} onChange={(e) => setMap({ ...map, [s]: e.target.value })} />
+          <input
+            className="input grow"
+            style={{ width: 'auto' }}
+            list="stakeholder-names"
+            value={map[s]}
+            onChange={(e) => setMap({ ...map, [s]: e.target.value })}
+          />
         </div>
       ))}
       <ErrorBox error={error} />
@@ -472,8 +594,12 @@ function RenameModal(props: { title: string; onClose: () => void; onSave: (t: st
       onClose={props.onClose}
       footer={
         <>
-          <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" disabled={!t.trim() || busy} onClick={() => void run(() => props.onSave(t.trim()))}>Save</button>
+          <button className="btn" onClick={props.onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" disabled={!t.trim() || busy} onClick={() => void run(() => props.onSave(t.trim()))}>
+            Save
+          </button>
         </>
       }
     >

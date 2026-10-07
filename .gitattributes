@@ -1,0 +1,3 @@
+# Check out text files with LF on every OS, so they match the repo and Biome's formatter
+# (Windows' core.autocrlf would otherwise turn them into CRLF and fail `npm run check`).
+* text=auto eol=lf

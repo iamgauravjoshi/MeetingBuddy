@@ -8,9 +8,21 @@ import { getSettings, saveSettings, setSecret } from './settings'
 import { mergeStreams, transcribe } from './stt'
 import { parseTranscript } from './transcriptParser'
 import { getModel } from './llm'
+import { deleteMeetingAudio, meetingAudioDir, sweepOrphanedAudio } from './audio'
 import { generateText } from 'ai'
 
-const audioDir = (meetingId: string): string => join(app.getPath('userData'), 'audio', meetingId)
+const audioRoot = (): string => join(app.getPath('userData'), 'audio')
+const audioDir = (meetingId: string): string => meetingAudioDir(audioRoot(), meetingId)
+
+/** Startup cleanup: deletes recordings whose meeting was deleted (e.g. by an older version that kept them). */
+export function removeOrphanedAudio(): void {
+  sweepOrphanedAudio(audioRoot(), new Set(db.listMeetingIds()))
+}
+
+function deleteMeeting(meetingId: string): void {
+  db.deleteMeeting(meetingId)
+  deleteMeetingAudio(audioRoot(), meetingId)
+}
 
 /** Sends an event to every renderer window. */
 export function broadcast(channel: string, ...args: unknown[]): void {
@@ -98,7 +110,12 @@ export const api = {
   getProject: (id: string) => db.getProject(id),
   createProject: (name: string, description: string) => db.createProject(name, description),
   updateProject: (id: string, name: string, description: string) => db.updateProject(id, name, description),
-  deleteProject: (id: string) => db.deleteProject(id),
+  deleteProject: (id: string) => {
+    // the cascade removes the meeting rows, so collect their ids first to delete their audio
+    const meetingIds = db.listMeetings(id).map((m) => m.id)
+    db.deleteProject(id)
+    for (const mid of meetingIds) deleteMeetingAudio(audioRoot(), mid)
+  },
 
   listStakeholders: (projectId: string) => db.listStakeholders(projectId),
   upsertStakeholder: (s: Omit<Stakeholder, 'id'> & { id?: string }) => db.upsertStakeholder(s),
@@ -123,7 +140,7 @@ export const api = {
   listMeetings: (projectId: string) => db.listMeetings(projectId),
   getMeeting: (id: string) => db.getMeeting(id),
   renameMeeting: (id: string, title: string) => db.updateMeeting(id, { title }),
-  deleteMeeting: (id: string) => db.deleteMeeting(id),
+  deleteMeeting: (id: string) => deleteMeeting(id),
   getTranscript: (id: string) => ({ segments: db.listSegments(id), marks: db.listMarks(id) }),
   renameSpeaker: (meetingId: string, from: string, to: string) => db.renameSpeaker(meetingId, from, to),
 

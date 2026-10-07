@@ -1,7 +1,7 @@
 import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, Menu, nativeImage, Notification, session, shell, Tray } from 'electron'
 import { join } from 'node:path'
 import { openDb } from './db'
-import { api, broadcast, setShowMainWindow } from './api'
+import { api, broadcast, removeOrphanedAudio, setShowMainWindow } from './api'
 import { MeetingDetector } from './detector'
 import { getSettings } from './settings'
 import type { DetectedMeeting, RecordingState } from '@shared/types'
@@ -149,6 +149,11 @@ app.on('second-instance', showWindow)
 app.whenReady().then(() => {
   app.setAppUserModelId('com.meetingbuddy.app')
   openDb(join(app.getPath('userData'), 'meetingbuddy.db'))
+  try {
+    removeOrphanedAudio()
+  } catch (e) {
+    console.warn('Could not remove orphaned recordings', e)
+  }
   setShowMainWindow(showWindow)
 
   for (const [name, fn] of Object.entries(api)) {

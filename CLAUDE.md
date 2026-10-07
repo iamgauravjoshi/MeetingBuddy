@@ -100,6 +100,10 @@ There is no linter configured.
 - `db.ts` is a thin query layer over the `node:sqlite` `DatabaseSync`. Columns are snake_case and get mapped to the camelCase types in `src/shared/types.ts`.
 - `db.tx()` uses a plain `BEGIN`/`COMMIT`, which **does not nest**. Don't call `addSegments` or `saveReport` (which open their own transactions) inside another `tx`.
 - A meeting keeps only its latest report: `saveReport` deletes older ones.
+- Recordings live in `<userData>/audio/<meetingId>/{mic,system}.webm`. `audio.ts` owns that folder:
+  - `meetingAudioDir` only accepts meeting UUIDs, so an id from IPC can't reach paths outside it.
+  - `api.deleteMeeting` and `api.deleteProject` delete the audio along with the rows. For a project, the meeting ids are collected before the cascade.
+  - At startup, `removeOrphanedAudio` deletes UUID folders that have no meeting row.
 - `settings.ts` stores `settings.json` and `secrets.json` in userData.
   - API keys are encrypted with Electron `safeStorage` and never returned to the renderer. The renderer only sees `settings.hasKey`.
   - LLM and STT keys share one secrets map, keyed by provider id.

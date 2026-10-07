@@ -5,7 +5,7 @@ vi.mock('../src/main/db', () => ({}))
 vi.mock('../src/main/llm', () => ({}))
 vi.mock('../src/main/settings', () => ({}))
 
-import { matchQuote, quoteMatches, validateChanges } from '../src/main/analysis'
+import { describeChanges, matchQuote, quoteMatches, validateChanges } from '../src/main/analysis'
 import type { Item, Segment } from '@shared/types'
 
 const seg = (id: string, speaker: string, text: string, t = 0): Segment => ({
@@ -97,5 +97,21 @@ describe('validateChanges', () => {
   it('replaces an unknown speaker with the speaker of the evidence', () => {
     const { kept } = validateChanges([change({ speaker: 'Someone else' })], segRef, itemRef, segments)
     expect(kept[0].speaker).toBe('Priya')
+  })
+})
+
+describe('describeChanges', () => {
+  const change = (title: string) => ({ op: 'create' as const, itemId: title, itemType: 'task' as const, title, after: { title } })
+
+  it('shows what an update changed, shortening long values', () => {
+    const [line] = describeChanges([
+      { op: 'update', itemId: 'i', itemType: 'requirement', title: 'SSO', before: { body: '', owner: 'Priya' }, after: { body: 'x'.repeat(200), owner: 'Rahul' } }
+    ])
+    expect(line).toBe(`Changed requirement "SSO": body ∅ → ${'x'.repeat(79)}…; owner Priya → Rahul`)
+  })
+  it('caps the lines per meeting', () => {
+    const lines = describeChanges(Array.from({ length: 25 }, (_, i) => change(`Task ${i}`)))
+    expect(lines).toHaveLength(21)
+    expect(lines.at(-1)).toBe('…and 5 more changes')
   })
 })

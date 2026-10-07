@@ -58,10 +58,39 @@ function buildRefs(items: Item[], segments: Segment[]) {
   return { itemRef, segRef, itemText: itemLines.join('\n'), transcriptText: segLines.join('\n') }
 }
 
+const MAX_HISTORY_LINES = 20 // per earlier meeting
+const OP_VERB: Record<StateVersion['changes'][number]['op'], string> = {
+  create: 'Added',
+  update: 'Changed',
+  close: 'Closed',
+  supersede: 'Superseded',
+  flag: 'Flagged a conflict, opened'
+}
+const shortValue = (v: unknown): string => {
+  const s = String(v ?? '').replace(/\s+/g, ' ').trim()
+  return !s ? '∅' : s.length > 80 ? `${s.slice(0, 79)}…` : s
+}
+
+/** One line per applied change, e.g. `Changed deadline "MVP launch": dueDate 2026-11-01 → 2026-11-20`. */
+export function describeChanges(changes: StateVersion['changes']): string[] {
+  const lines = changes.map((c) => {
+    const line = `${OP_VERB[c.op]} ${c.itemType} "${c.title}"`
+    if (c.op !== 'update') return line
+    const fields = Object.keys(c.after).map((k) => {
+      const key = k as keyof Item
+      return `${k} ${shortValue(c.before?.[key])} → ${shortValue(c.after[key])}`
+    })
+    return fields.length ? `${line}: ${fields.join('; ')}` : line
+  })
+  return lines.length > MAX_HISTORY_LINES
+    ? [...lines.slice(0, MAX_HISTORY_LINES), `…and ${lines.length - MAX_HISTORY_LINES} more changes`]
+    : lines
+}
+
 const INSTRUCTIONS = `You are MeetingBuddy, an AI that tracks how a project evolves from meeting to meeting.
 Your job is NOT to summarize the meeting. Your job is to answer: "What changed in the project because of this meeting?"
 
-You receive (1) the current project state as a list of items with IDs, (2) summaries of previous meetings, and (3) a speaker-labelled transcript whose lines have IDs like S12.
+You receive (1) the current project state as a list of items with IDs, (2) the changes that previous meetings made to the project state, and (3) a speaker-labelled transcript whose lines have IDs like S12.
 
 Produce a list of proposed changes to the project state. Each change must be one of these categories:
 - requirement: a new requirement, or a change to an existing one
@@ -304,7 +333,7 @@ async function runAnalysis(meetingId: string): Promise<Analysis> {
 
   const items = db.listItems(project.id).filter((i) => i.status !== 'superseded' && i.status !== 'cancelled')
   const stakeholders = db.listStakeholders(project.id)
-  const history = db.recentMeetingSummaries(project.id, meetingId)
+  const history = db.recentMeetingChanges(project.id, meetingId)
   const marks = db.listMarks(meetingId)
   const { itemRef, segRef, itemText, transcriptText } = buildRefs(items, segments)
 
@@ -313,7 +342,10 @@ async function runAnalysis(meetingId: string): Promise<Analysis> {
     project.description && `## Description\n${project.description}`,
     `## Stakeholders\n${stakeholders.map((s) => `- ${s.name}${s.role ? ` (${s.role})` : ''}`).join('\n') || '(none listed)'}`,
     `## Current project state\n${itemText || '(empty: this is the first meeting, so everything relevant is new)'}`,
-    `## Previous meetings (most recent first)\n${history.map((h) => `- ${h.date.slice(0, 10)} "${h.title}": ${h.summary}`).join('\n') || '(none)'}`,
+    `## Changes from previous meetings (most recent first)\n${
+      history.map((h) => `- ${h.date.slice(0, 10)} "${h.title}":\n${describeChanges(h.changes).map((l) => `  - ${l}`).join('\n')}`).join('\n') ||
+      '(none applied yet)'
+    }`,
     `## This meeting\nTitle: ${meeting.title}\nDate: ${meeting.startedAt.slice(0, 10)}`,
     marks.length ? `Moments the user marked as important: ${marks.map((m) => fmtTime(m.t)).join(', ')}` : '',
     `## Transcript\n${transcriptText}`

@@ -135,8 +135,21 @@ describe('analyze → approve → apply', () => {
     expect(db.getMeeting(meetingId)?.status).toBe('applied')
   })
 
-  it('feeds the approved report into the next meeting as history', () => {
+  it('tells the next analysis what the meeting actually changed, not what the model summarized', async () => {
+    await new Promise((r) => setTimeout(r, 5)) // the next meeting starts strictly later
     const next = db.createMeeting(projectId, 'Next sync', 'ready').id
-    expect(db.recentMeetingSummaries(projectId, next)[0].summary).toContain('Supabase')
+    db.addSegments(next, [{ speaker: 'Priya', tStart: 0, tEnd: 4, text: 'Quick check on the Supabase migration plan.', source: 'manual' }])
+
+    await analyzeMeeting(next)
+    const prompt = JSON.stringify(model.doGenerateCalls.at(-1)!.prompt)
+
+    expect(prompt).toContain('## Changes from previous meetings')
+    expect(prompt).toContain('\\"Weekly sync\\"')
+    expect(prompt).toContain('Superseded decision \\"Use Firebase for the backend\\"')
+    expect(prompt).toContain('Changed deadline \\"MVP launch\\": dueDate 2026-11-01 → 2026-11-20')
+    expect(prompt).toContain('Closed question \\"Do we support payments in v1?\\"')
+    // the model's own summary is not trusted as history, and rejected proposals never reach it
+    expect(prompt).not.toContain(MODEL_OUTPUT.summary)
+    expect(prompt).not.toContain('Google login')
   })
 })

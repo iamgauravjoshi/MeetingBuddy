@@ -192,6 +192,48 @@ describe('items', () => {
   })
 })
 
+describe('changes from earlier meetings', () => {
+  beforeEach(() => db.openDb(':memory:'))
+  const tick = () => new Promise((r) => setTimeout(r, 5)) // keeps started_at strictly increasing
+  const added = (title: string) => [{ op: 'create' as const, itemId: title, itemType: 'decision' as const, title, after: { title } }]
+
+  it('lists what earlier meetings applied, most recent first', async () => {
+    const p = db.createProject('P', '')
+    const first = db.createMeeting(p.id, 'Kickoff', 'applied')
+    db.addStateVersion(p.id, first.id, added('Use Firebase'))
+    await tick()
+    const second = db.createMeeting(p.id, 'Sync', 'applied')
+    db.addStateVersion(p.id, second.id, added('Use Postgres'))
+    db.addStateVersion(p.id, second.id, added('Hire a DBA')) // applied again after fixing a skipped change
+    await tick()
+    const current = db.createMeeting(p.id, 'Today', 'ready')
+
+    const history = db.recentMeetingChanges(p.id, current.id)
+
+    expect(history.map((h) => h.title)).toEqual(['Sync', 'Kickoff'])
+    expect(history[0].changes.map((c) => c.title)).toEqual(['Use Postgres', 'Hire a DBA'])
+  })
+
+  it('leaves out meetings whose changes were never applied', async () => {
+    const p = db.createProject('P', '')
+    const analyzedOnly = db.createMeeting(p.id, 'Analyzed only', 'analyzed')
+    db.saveReport(analyzedOnly.id, 'mock', 'We dropped the iOS app.', 0, [])
+    await tick()
+    const current = db.createMeeting(p.id, 'Today', 'ready')
+    expect(db.recentMeetingChanges(p.id, current.id)).toEqual([])
+  })
+
+  it('leaves out the meeting itself and meetings after it', async () => {
+    const p = db.createProject('P', '')
+    const current = db.createMeeting(p.id, 'Older meeting', 'applied')
+    db.addStateVersion(p.id, current.id, added('Own change'))
+    await tick()
+    const later = db.createMeeting(p.id, 'Later meeting', 'applied')
+    db.addStateVersion(p.id, later.id, added('Future change'))
+    expect(db.recentMeetingChanges(p.id, current.id)).toEqual([])
+  })
+})
+
 describe('recovering an interrupted analysis', () => {
   beforeEach(() => db.openDb(':memory:'))
 

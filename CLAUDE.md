@@ -105,7 +105,10 @@ There is no linter configured.
   - `supersede` marks the old item `superseded` and creates a new one.
   - `flag` (a conflict) creates an open `question` item named "Resolve conflict: …".
 - **`db.updateItem` ignores patches that change nothing:** the version, `updatedAt`, history and state diff are left alone. `api.updateItem` records only the fields that changed. `api.updateProposal` refuses to edit applied proposals or mark one applied.
-- **Previous meetings feed the next analysis:** each meeting's report summary is passed into later analyses via `recentMeetingSummaries`.
+- **Previous meetings feed the next analysis** through `db.recentMeetingChanges`, formatted by `describeChanges`:
+  - It contains only changes that were actually **applied** (`state_versions`), never a report's LLM summary, which may describe rejected proposals.
+  - It covers only meetings that **started before** the one being analyzed, so re-analyzing an old meeting never sees later ones.
+  - It includes the 5 most recent such meetings, with up to 20 change lines each.
 
 ### Data and settings
 

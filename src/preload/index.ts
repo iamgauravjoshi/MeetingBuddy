@@ -6,7 +6,6 @@ const EVENTS = [
   'meeting:detected',
   'meeting:ended',
   'meeting:changed',
-  'recording:changed',
   'transcript:appended',
   'navigate:meeting',
   'app:quit-requested'

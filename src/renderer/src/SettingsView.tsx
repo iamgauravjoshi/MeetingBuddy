@@ -100,7 +100,15 @@ export function SettingsView({ onSaved }: { onSaved: (s: Settings) => void }) {
             {testing ? 'Testing…' : 'Save & test connection'}
           </button>
           {s.hasKey[s.llmProvider] && (
-            <button className="btn ghost sm" onClick={async () => setS(await api.setSecret(s.llmProvider, ''))}>Remove saved key</button>
+            <button
+              className="btn ghost sm"
+              onClick={() => {
+                setError(null)
+                api.setSecret(s.llmProvider, '').then(setS, (e) => setError(errMsg(e)))
+              }}
+            >
+              Remove saved key
+            </button>
           )}
         </div>
       </div>

@@ -12,7 +12,7 @@ import {
   type Stakeholder
 } from '@shared/types'
 import { api, errMsg } from './api'
-import { ErrorBox, Field, fmtDate, fmtTime, Modal, useEvent } from './ui'
+import { ErrorBox, Field, fmtDate, fmtTime, Modal, useAction, useEvent } from './ui'
 
 const OP_BADGE: Record<Proposal['op'], [string, string]> = {
   create: ['NEW', 'green'],
@@ -108,6 +108,7 @@ export function MeetingView(props: {
   }
 
   const setStatus = async (p: Proposal, status: Proposal['status']): Promise<void> => {
+    setError(null)
     await api.updateProposal(p.id, { status })
     setReport((r) => r && { ...r, proposals: r.proposals.map((x) => (x.id === p.id ? { ...x, status } : x)) })
   }
@@ -151,11 +152,13 @@ export function MeetingView(props: {
         </button>
         <button
           className="btn danger"
-          disabled={props.live}
-          onClick={async () => {
+          disabled={props.live || !!busy}
+          onClick={() => {
             if (!confirm('Delete this meeting, its transcript and its report? Changes already applied to the project stay.')) return
-            await api.deleteMeeting(meeting.id)
-            props.onBack(meeting.projectId)
+            void run('Deleting meeting…', async () => {
+              await api.deleteMeeting(meeting.id)
+              props.onBack(meeting.projectId)
+            })
           }}
         >
           Delete
@@ -220,11 +223,15 @@ export function MeetingView(props: {
               <>
                 <button
                   className="btn sm"
-                  disabled={pending === 0}
+                  disabled={pending === 0 || !!busy}
                   title="Accept every firm, evidence-backed change with confidence of at least 0.7"
-                  onClick={async () => {
-                    for (const p of proposals) if (p.status === 'pending' && p.strength === 'firm' && p.confidence >= 0.7) await setStatus(p, 'accepted')
-                  }}
+                  onClick={() =>
+                    void run('Accepting firm changes…', async () => {
+                      for (const p of proposals) {
+                        if (p.status === 'pending' && p.strength === 'firm' && p.confidence >= 0.7) await api.updateProposal(p.id, { status: 'accepted' })
+                      }
+                    })
+                  }
                 >
                   Accept all firm
                 </button>
@@ -275,7 +282,7 @@ export function MeetingView(props: {
                           p={p}
                           target={p.targetItemId ? itemsById.get(p.targetItemId) : undefined}
                           onJump={jumpTo}
-                          onStatus={(s) => void setStatus(p, s)}
+                          onStatus={(s) => setStatus(p, s).catch((e) => setError(errMsg(e)))}
                           onEdited={(np) => setReport((r) => r && { ...r, proposals: r.proposals.map((x) => (x.id === np.id ? np : x)) })}
                         />
                       ))}
@@ -394,8 +401,11 @@ function ProposalCard(props: {
   )
 }
 
-function EditProposalModal(props: { p: Proposal; onClose: () => void; onSave: (patch: Pick<Proposal, 'title' | 'body' | 'owner' | 'dueDate' | 'itemType'>) => void }) {
+// The dialogs below save through useAction: on failure they stay open and show why.
+
+function EditProposalModal(props: { p: Proposal; onClose: () => void; onSave: (patch: Pick<Proposal, 'title' | 'body' | 'owner' | 'dueDate' | 'itemType'>) => Promise<void> }) {
   const [f, setF] = useState({ title: props.p.title, body: props.p.body, owner: props.p.owner, dueDate: props.p.dueDate, itemType: props.p.itemType })
+  const { run, busy, error } = useAction()
   return (
     <Modal
       title="Edit proposed change"
@@ -403,7 +413,7 @@ function EditProposalModal(props: { p: Proposal; onClose: () => void; onSave: (p
       footer={
         <>
           <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" onClick={() => props.onSave(f)}>Save & accept</button>
+          <button className="btn primary" disabled={busy} onClick={() => void run(() => props.onSave(f))}>Save & accept</button>
         </>
       }
     >
@@ -418,12 +428,14 @@ function EditProposalModal(props: { p: Proposal; onClose: () => void; onSave: (p
         <div className="grow"><Field label="Owner"><input className="input" value={f.owner} onChange={(e) => setF({ ...f, owner: e.target.value })} /></Field></div>
         <div className="grow"><Field label="Due date"><input className="input" value={f.dueDate} placeholder="YYYY-MM-DD" onChange={(e) => setF({ ...f, dueDate: e.target.value })} /></Field></div>
       </div>
+      <ErrorBox error={error} />
     </Modal>
   )
 }
 
-function SpeakerMapModal(props: { speakers: string[]; stakeholders: Stakeholder[]; onClose: () => void; onSave: (map: Record<string, string>) => void }) {
+function SpeakerMapModal(props: { speakers: string[]; stakeholders: Stakeholder[]; onClose: () => void; onSave: (map: Record<string, string>) => Promise<void> }) {
   const [map, setMap] = useState<Record<string, string>>(Object.fromEntries(props.speakers.map((s) => [s, s])))
+  const { run, busy, error } = useAction()
   return (
     <Modal
       title="Map speakers to people"
@@ -431,7 +443,7 @@ function SpeakerMapModal(props: { speakers: string[]; stakeholders: Stakeholder[
       footer={
         <>
           <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" onClick={() => props.onSave(map)}>Save</button>
+          <button className="btn primary" disabled={busy} onClick={() => void run(() => props.onSave(map))}>Save</button>
         </>
       }
     >
@@ -446,12 +458,14 @@ function SpeakerMapModal(props: { speakers: string[]; stakeholders: Stakeholder[
           <input className="input grow" style={{ width: 'auto' }} list="stakeholder-names" value={map[s]} onChange={(e) => setMap({ ...map, [s]: e.target.value })} />
         </div>
       ))}
+      <ErrorBox error={error} />
     </Modal>
   )
 }
 
-function RenameModal(props: { title: string; onClose: () => void; onSave: (t: string) => void }) {
+function RenameModal(props: { title: string; onClose: () => void; onSave: (t: string) => Promise<void> }) {
   const [t, setT] = useState(props.title)
+  const { run, busy, error } = useAction()
   return (
     <Modal
       title="Rename meeting"
@@ -459,11 +473,12 @@ function RenameModal(props: { title: string; onClose: () => void; onSave: (t: st
       footer={
         <>
           <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" disabled={!t.trim()} onClick={() => props.onSave(t.trim())}>Save</button>
+          <button className="btn primary" disabled={!t.trim() || busy} onClick={() => void run(() => props.onSave(t.trim()))}>Save</button>
         </>
       }
     >
       <input className="input" value={t} onChange={(e) => setT(e.target.value)} autoFocus />
+      <ErrorBox error={error} />
     </Modal>
   )
 }

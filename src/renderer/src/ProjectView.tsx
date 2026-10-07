@@ -11,8 +11,8 @@ import {
   type Stakeholder,
   type StateVersion
 } from '@shared/types'
-import { api, errMsg } from './api'
-import { ErrorBox, Field, fmtDate, Modal, useEvent } from './ui'
+import { api } from './api'
+import { ErrorBox, Field, fmtDate, Modal, useAction, useEvent } from './ui'
 
 const STATUS_BADGE: Record<ItemStatus, string> = { open: 'blue', done: 'green', superseded: 'amber', cancelled: 'red' }
 const MEETING_STATUS: Record<Meeting['status'], [string, string]> = {
@@ -84,6 +84,7 @@ export function ProjectView(props: {
 function EditProjectModal(props: { project: Project; onClose: () => void; onSaved: () => void; onDeleted: () => void }) {
   const [name, setName] = useState(props.project.name)
   const [desc, setDesc] = useState(props.project.description)
+  const { run, busy, error } = useAction()
   return (
     <Modal
       title="Edit project"
@@ -92,10 +93,13 @@ function EditProjectModal(props: { project: Project; onClose: () => void; onSave
         <>
           <button
             className="btn danger"
-            onClick={async () => {
+            disabled={busy}
+            onClick={() => {
               if (!confirm(`Delete "${props.project.name}" with all its items, meetings and reports? This cannot be undone.`)) return
-              await api.deleteProject(props.project.id)
-              props.onDeleted()
+              void run(async () => {
+                await api.deleteProject(props.project.id)
+                props.onDeleted()
+              })
             }}
           >
             Delete project
@@ -104,10 +108,13 @@ function EditProjectModal(props: { project: Project; onClose: () => void; onSave
           <button className="btn" onClick={props.onClose}>Cancel</button>
           <button
             className="btn primary"
-            onClick={async () => {
-              await api.updateProject(props.project.id, name.trim() || props.project.name, desc.trim())
-              props.onSaved()
-            }}
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await api.updateProject(props.project.id, name.trim() || props.project.name, desc.trim())
+                props.onSaved()
+              })
+            }
           >
             Save
           </button>
@@ -116,6 +123,7 @@ function EditProjectModal(props: { project: Project; onClose: () => void; onSave
     >
       <Field label="Name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
       <Field label="Description, goals and context"><textarea className="input" rows={6} value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>
+      <ErrorBox error={error} />
     </Modal>
   )
 }
@@ -197,6 +205,8 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
   }, [props.item.id])
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
 
+  const { run, busy, error } = useAction()
+
   const save = async (): Promise<void> => {
     if (isNew) await api.createItem({ projectId: props.item.projectId!, type: f.type, title: f.title.trim(), body: f.body.trim(), owner: f.owner.trim(), dueDate: f.dueDate })
     else await api.updateItem(props.item.id!, { ...f, title: f.title.trim(), body: f.body.trim(), owner: f.owner.trim() })
@@ -212,10 +222,13 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
           {!isNew && (
             <button
               className="btn danger"
-              onClick={async () => {
+              disabled={busy}
+              onClick={() => {
                 if (!confirm('Delete this item? Its change history will be lost.')) return
-                await api.deleteItem(props.item.id!)
-                props.onSaved()
+                void run(async () => {
+                  await api.deleteItem(props.item.id!)
+                  props.onSaved()
+                })
               }}
             >
               Delete
@@ -223,7 +236,7 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
           )}
           <span className="grow" />
           <button className="btn" onClick={props.onClose}>Cancel</button>
-          <button className="btn primary" disabled={!f.title.trim()} onClick={() => void save()}>Save</button>
+          <button className="btn primary" disabled={!f.title.trim() || busy} onClick={() => void run(save)}>Save</button>
         </>
       }
     >
@@ -247,6 +260,7 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
         <div className="grow"><Field label="Owner"><input className="input" value={f.owner} onChange={set('owner')} /></Field></div>
         <div className="grow"><Field label="Due date"><input className="input" type="date" value={f.dueDate} onChange={set('dueDate')} /></Field></div>
       </div>
+      <ErrorBox error={error} />
       {history.length > 0 && (
         <div className="col">
           <h3>History: who changed this, and when</h3>
@@ -267,8 +281,8 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
 function Meetings({ projectId, onOpen }: { projectId: string; onOpen: (id: string) => void }) {
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [paste, setPaste] = useState<{ title: string; text: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const pickFile = useAction()
+  const importAudio = useAction()
   const load = useCallback(async () => setMeetings(await api.listMeetings(projectId)), [projectId])
   useEffect(() => void load(), [load])
   useEvent('meeting:changed', () => void load(), [load])
@@ -279,34 +293,30 @@ function Meetings({ projectId, onOpen }: { projectId: string; onOpen: (id: strin
         <button className="btn" onClick={() => setPaste({ title: `Meeting · ${new Date().toLocaleDateString()}`, text: '' })}>Paste transcript</button>
         <button
           className="btn"
-          onClick={async () => {
-            setError(null)
-            const f = await api.pickTranscriptFile()
-            if (f) setPaste({ title: f.name.replace(/\.[^.]+$/, ''), text: f.text })
-          }}
+          disabled={pickFile.busy}
+          onClick={() =>
+            void pickFile.run(async () => {
+              const f = await api.pickTranscriptFile()
+              if (f) setPaste({ title: f.name.replace(/\.[^.]+$/, ''), text: f.text })
+            })
+          }
         >
           Import transcript file (.vtt / .srt / .txt)
         </button>
         <button
           className="btn"
-          disabled={busy}
-          onClick={async () => {
-            setError(null)
-            setBusy(true)
-            try {
+          disabled={importAudio.busy}
+          onClick={() =>
+            void importAudio.run(async () => {
               const id = await api.importAudio(projectId)
               if (id) onOpen(id)
-            } catch (e) {
-              setError(errMsg(e))
-            } finally {
-              setBusy(false)
-            }
-          }}
+            })
+          }
         >
-          {busy ? 'Transcribing…' : 'Import recording (audio / video)'}
+          {importAudio.busy ? 'Transcribing…' : 'Import recording (audio / video)'}
         </button>
       </div>
-      <ErrorBox error={error} />
+      <ErrorBox error={pickFile.error ?? importAudio.error} />
       <div className="list">
         {meetings.map((m) => {
           const [label, color] = MEETING_STATUS[m.status]
@@ -324,44 +334,54 @@ function Meetings({ projectId, onOpen }: { projectId: string; onOpen: (id: strin
         {meetings.length === 0 && <div className="empty">No meetings yet. Record one, or import a transcript.</div>}
       </div>
       {paste && (
-        <Modal
-          title="Import transcript"
+        <PasteTranscriptModal
+          initial={paste}
           onClose={() => setPaste(null)}
-          footer={
-            <>
-              <button className="btn" onClick={() => setPaste(null)}>Cancel</button>
-              <button
-                className="btn primary"
-                disabled={!paste.text.trim()}
-                onClick={async () => {
-                  try {
-                    const m = await api.importTranscript(projectId, paste.title.trim() || 'Meeting', paste.text)
-                    setPaste(null)
-                    onOpen(m.id)
-                  } catch (e) {
-                    setError(errMsg(e))
-                    setPaste(null)
-                  }
-                }}
-              >
-                Import
-              </button>
-            </>
-          }
-        >
-          <Field label="Meeting title"><input className="input" value={paste.title} onChange={(e) => setPaste({ ...paste, title: e.target.value })} /></Field>
-          <Field label="Transcript">
-            <textarea
-              className="input"
-              rows={14}
-              value={paste.text}
-              onChange={(e) => setPaste({ ...paste, text: e.target.value })}
-              placeholder={'Priya: We need SSO for the enterprise tier.\nRahul: Agreed. Let us push the launch to November 20.\n\nTeams/Zoom/Meet .vtt exports also work.'}
-            />
-          </Field>
-        </Modal>
+          onImport={async (title, text) => {
+            const m = await api.importTranscript(projectId, title, text)
+            setPaste(null)
+            onOpen(m.id)
+          }}
+        />
       )}
     </div>
+  )
+}
+
+/** On failure the dialog stays open with the error, so the pasted text isn't lost. */
+function PasteTranscriptModal(props: {
+  initial: { title: string; text: string }
+  onClose: () => void
+  onImport: (title: string, text: string) => Promise<void>
+}) {
+  const [title, setTitle] = useState(props.initial.title)
+  const [text, setText] = useState(props.initial.text)
+  const { run, busy, error } = useAction()
+  return (
+    <Modal
+      title="Import transcript"
+      onClose={props.onClose}
+      footer={
+        <>
+          <button className="btn" onClick={props.onClose}>Cancel</button>
+          <button className="btn primary" disabled={!text.trim() || busy} onClick={() => void run(() => props.onImport(title.trim() || 'Meeting', text))}>
+            Import
+          </button>
+        </>
+      }
+    >
+      <Field label="Meeting title"><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+      <Field label="Transcript">
+        <textarea
+          className="input"
+          rows={14}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={'Priya: We need SSO for the enterprise tier.\nRahul: Agreed. Let us push the launch to November 20.\n\nTeams/Zoom/Meet .vtt exports also work.'}
+        />
+      </Field>
+      <ErrorBox error={error} />
+    </Modal>
   )
 }
 
@@ -372,11 +392,14 @@ function Stakeholders({ projectId }: { projectId: string }) {
   const [f, setF] = useState({ name: '', role: '', email: '' })
   const load = useCallback(async () => setList(await api.listStakeholders(projectId)), [projectId])
   useEffect(() => void load(), [load])
-  const add = async (): Promise<void> => {
+  const { run, busy, error } = useAction()
+  const add = (): void => {
     if (!f.name.trim()) return
-    await api.upsertStakeholder({ projectId, name: f.name.trim(), role: f.role.trim(), email: f.email.trim() })
-    setF({ name: '', role: '', email: '' })
-    await load()
+    void run(async () => {
+      await api.upsertStakeholder({ projectId, name: f.name.trim(), role: f.role.trim(), email: f.email.trim() })
+      setF({ name: '', role: '', email: '' })
+      await load()
+    })
   }
   return (
     <div className="col" style={{ gap: 12, maxWidth: 760 }}>
@@ -385,13 +408,25 @@ function Stakeholders({ projectId }: { projectId: string }) {
         <input className="input grow" style={{ width: 'auto' }} placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && void add()} />
         <input className="input grow" style={{ width: 'auto' }} placeholder="Role (e.g. Product owner)" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && void add()} />
         <input className="input grow" style={{ width: 'auto' }} placeholder="Email (optional)" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && void add()} />
-        <button className="btn primary" onClick={() => void add()}>Add</button>
+        <button className="btn primary" disabled={busy} onClick={add}>Add</button>
       </div>
+      <ErrorBox error={error} />
       <div className="list">
         {list.map((s) => (
           <div key={s.id} className="list-row" style={{ cursor: 'default' }}>
             <div className="grow"><b>{s.name}</b> {s.role && <span className="muted">· {s.role}</span>} {s.email && <span className="muted small">· {s.email}</span>}</div>
-            <button className="btn ghost sm" onClick={async () => { await api.deleteStakeholder(s.id); await load() }}>Remove</button>
+            <button
+              className="btn ghost sm"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  await api.deleteStakeholder(s.id)
+                  await load()
+                })
+              }
+            >
+              Remove
+            </button>
           </div>
         ))}
         {list.length === 0 && <div className="empty">No stakeholders yet.</div>}

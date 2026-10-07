@@ -27,9 +27,10 @@ There is no linter configured.
 
 - **SQLite is `node:sqlite`** (built into Electron 44 / Node 24), not better-sqlite3. There are no native modules to rebuild, so keep it that way.
 - **electron-vite 5 requires Vite 7.** Don't bump `vite` to 8, or `@vitejs/plugin-react` past 5.
-- **TypeScript 7:** `baseUrl` was removed, so `paths` use `./`-relative targets. The tsconfigs are not `composite`, because the renderer type-imports `src/main/api.ts`.
+- **TypeScript 7:** `baseUrl` was removed, so `paths` use `./`-relative targets. The root `tsconfig.json` is solution-style (`files: []` plus `references` to `tsconfig.node.json` and `tsconfig.web.json`) so editors pick the right config per file. The tsconfigs are not `composite`, because the renderer type-imports `src/main/api.ts`.
 - **AI SDK v7:** `generateObject` is deprecated. Use `generateText({ instructions, prompt, output: Output.object({ schema }) })` and read `result.output`. Tests use `MockLanguageModelV4` from `ai/test`.
-- **npm 11 blocks install scripts** by default. `esbuild` and `electron-winstaller` were approved with `npm install-scripts approve`. Electron downloads its binary lazily on first run.
+- **npm 11 blocks install scripts** by default. `esbuild` and `electron-winstaller` were approved with `npm install-scripts approve`. Electron's install script is also blocked, so after a fresh install `node_modules/electron` has no `dist/` or `path.txt`, and `npm run dev` fails with `Error: Electron uninstall`. Fix it with `node node_modules/electron/install.js`, or permanently with `npm install-scripts approve electron`.
+- **`overrides.global-agent: ^4.1.3`** in `package.json` fixes `npm audit` (GHSA-hp3w-g68c-fv3c). electron-builder's `app-builder-lib` still pins `@electron/get@3`, which pulls in `global-agent@3` → `roarr@2` → a vulnerable `sprintf-js`; `global-agent@4` drops roarr and keeps the `bootstrap()` API that `@electron/get` calls. Don't override `@electron/get` itself to v5: it is ESM-only and `app-builder-lib` loads it with `require()`. Never run `npm audit fix --force`, because it downgrades electron-builder. Remove the override once electron-builder ships with `@electron/get` ≥ 4.
 - The `@shared/*` alias maps to `src/shared/*`. It is configured in `electron.vite.config.ts`, both tsconfigs and `vitest.config.ts`.
 
 ## Architecture

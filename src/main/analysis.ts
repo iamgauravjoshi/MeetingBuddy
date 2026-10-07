@@ -242,6 +242,7 @@ export function validateChanges(
       category: c.category,
       op,
       targetItemId: target?.id ?? null,
+      targetVersion: target?.version ?? null,
       itemType: ITEM_TYPES.includes(c.item_type) ? c.item_type : DEFAULT_TYPE[c.category],
       title: c.title.trim(),
       body: c.body.trim(),
@@ -262,7 +263,39 @@ export function validateChanges(
 
 // ---------- run analysis ----------
 
-export async function analyzeMeeting(meetingId: string) {
+type Analysis = ReturnType<typeof db.getReport>
+const running = new Map<string, Promise<Analysis>>()
+
+/**
+ * Analyzes a meeting against the current project state. Only one analysis runs per meeting:
+ * a second call while one is running gets the same result. A meeting whose changes were applied
+ * can't be re-analyzed, because that would replace the report the project state came from.
+ */
+export function analyzeMeeting(meetingId: string): Promise<Analysis> {
+  const inFlight = running.get(meetingId)
+  if (inFlight) return inFlight
+  const meeting = db.getMeeting(meetingId)
+  if (!meeting) return Promise.reject(new Error('Meeting not found'))
+  if (meeting.status === 'applied' || db.getReport(meetingId)?.proposals.some((p) => p.status === 'applied')) {
+    return Promise.reject(new Error("This meeting's changes were already applied to the project, so it can't be re-analyzed."))
+  }
+  const previous = meeting.status
+  db.updateMeeting(meetingId, { status: 'analyzing' })
+  const run = runAnalysis(meetingId)
+    .then((report) => {
+      db.updateMeeting(meetingId, { status: 'analyzed' })
+      return report
+    })
+    .catch((e) => {
+      if (db.getMeeting(meetingId)?.status === 'analyzing') db.updateMeeting(meetingId, { status: previous })
+      throw e
+    })
+    .finally(() => running.delete(meetingId))
+  running.set(meetingId, run)
+  return run
+}
+
+async function runAnalysis(meetingId: string): Promise<Analysis> {
   const meeting = db.getMeeting(meetingId)
   if (!meeting) throw new Error('Meeting not found')
   const project = db.getProject(meeting.projectId)!
@@ -300,27 +333,50 @@ export async function analyzeMeeting(meetingId: string) {
   const out = result.output
   const { kept, dropped } = validateChanges(out.changes, segRef, itemRef, segments)
   db.saveReport(meetingId, label, out.summary, dropped, kept)
-  db.updateMeeting(meetingId, { status: 'analyzed' })
   return db.getReport(meetingId)
 }
 
 // ---------- apply approved changes ----------
 
-export function applyApproved(meetingId: string): { applied: number } {
+/** Why a proposal can no longer be applied to the item it targets, or null if it still can. */
+function staleReason(p: Proposal, target: Item | null): string | null {
+  if (p.op === 'create' || p.op === 'flag') return null
+  if (!target) return 'The item it changes was deleted.'
+  // reports made before versions were recorded can only notice items that were replaced or cancelled
+  const changed = p.targetVersion !== null ? target.version !== p.targetVersion : target.status === 'superseded' || target.status === 'cancelled'
+  return changed ? `"${target.title}" has changed since this meeting was analyzed.` : null
+}
+
+export interface ApplyResult {
+  applied: number
+  /** Accepted proposals left unapplied (still accepted) because their target item changed or was deleted. */
+  skipped: { proposalId: string; title: string; reason: string }[]
+}
+
+export function applyApproved(meetingId: string): ApplyResult {
   const meeting = db.getMeeting(meetingId)
   const rep = db.getReport(meetingId)
   if (!meeting || !rep) throw new Error('No report for this meeting')
+  if (meeting.status === 'analyzing') throw new Error('An analysis is running for this meeting. Apply its changes after it finishes.')
   const accepted = rep.proposals.filter((p) => p.status === 'accepted')
   const changes: StateVersion['changes'] = []
 
+  // decide what is stale before applying anything, so changes in this batch don't invalidate each other
+  const skipped: ApplyResult['skipped'] = []
+  const toApply = accepted.filter((p) => {
+    const reason = staleReason(p, p.targetItemId ? db.getItem(p.targetItemId) : null)
+    if (reason) skipped.push({ proposalId: p.id, title: p.title, reason })
+    return !reason
+  })
+
   db.tx(() => {
-    for (const p of accepted) {
+    for (const p of toApply) {
       const ev = p.evidence[0]
       const hist = (itemId: string, summary: string): void =>
         db.addItemHistory({ itemId, meetingId, summary, speaker: p.speaker, quote: ev?.quote ?? '' })
       const target = p.targetItemId ? db.getItem(p.targetItemId) : null
 
-      if (p.op === 'create' || (!target && p.op !== 'flag')) {
+      if (p.op === 'create') {
         const it = db.createItem({ projectId: meeting.projectId, type: p.itemType, title: p.title, body: p.body, owner: p.owner, dueDate: p.dueDate })
         hist(it.id, `Created (${p.category.replace('_', ' ')})`)
         changes.push({ op: 'create', itemId: it.id, itemType: it.type, title: it.title, after: it })
@@ -330,10 +386,13 @@ export function applyApproved(meetingId: string): { applied: number } {
         if (p.body && p.body !== target.body) patch.body = p.body
         if (p.owner && p.owner !== target.owner) patch.owner = p.owner
         if (p.dueDate && p.dueDate !== target.dueDate) patch.dueDate = p.dueDate
-        const before = Object.fromEntries(Object.keys(patch).map((k) => [k, target[k as keyof Item]])) as Partial<Item>
-        const it = db.updateItem(target.id, patch)
-        hist(it.id, `Updated: ${Object.keys(patch).join(', ') || 'no field changes'}`)
-        changes.push({ op: 'update', itemId: it.id, itemType: it.type, title: it.title, before, after: patch })
+        // an update that confirms the item as it is changes nothing: no version, history or state change
+        if (Object.keys(patch).length) {
+          const before = Object.fromEntries(Object.keys(patch).map((k) => [k, target[k as keyof Item]])) as Partial<Item>
+          const it = db.updateItem(target.id, patch)
+          hist(it.id, `Updated: ${Object.keys(patch).join(', ')}`)
+          changes.push({ op: 'update', itemId: it.id, itemType: it.type, title: it.title, before, after: patch })
+        }
       } else if (p.op === 'close' && target) {
         db.updateItem(target.id, { status: 'done' })
         hist(target.id, 'Closed / resolved')
@@ -362,7 +421,7 @@ export function applyApproved(meetingId: string): { applied: number } {
       db.updateProposal(p.id, { status: 'applied' })
     }
     if (changes.length) db.addStateVersion(meeting.projectId, meetingId, changes)
-    db.updateMeeting(meetingId, { status: 'applied' })
+    if (toApply.length) db.updateMeeting(meetingId, { status: 'applied' })
   })
-  return { applied: accepted.length }
+  return { applied: toApply.length, skipped }
 }

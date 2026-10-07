@@ -180,6 +180,34 @@ describe('meetings', () => {
   })
 })
 
+describe('items', () => {
+  beforeEach(() => db.openDb(':memory:'))
+
+  it('updateItem leaves an item untouched when nothing changes', () => {
+    const p = db.createProject('P', '')
+    const it0 = db.createItem({ projectId: p.id, type: 'task', title: 'Write spec', body: '', owner: '', dueDate: '' })
+    const same = db.updateItem(it0.id, { title: 'Write spec', owner: '' })
+    expect(same).toMatchObject({ version: 1, updatedAt: it0.updatedAt })
+    expect(db.updateItem(it0.id, { owner: 'Rahul' }).version).toBe(2)
+  })
+})
+
+describe('recovering an interrupted analysis', () => {
+  beforeEach(() => db.openDb(':memory:'))
+
+  it('returns the meeting to analyzed if it has a report, otherwise to ready', () => {
+    const p = db.createProject('P', '')
+    const fresh = db.createMeeting(p.id, 'First analysis', 'analyzing')
+    const again = db.createMeeting(p.id, 'Re-analysis', 'analyzing')
+    db.saveReport(again.id, 'mock', 'earlier report', 0, [])
+
+    db.recoverInterruptedMeetings()
+
+    expect(db.getMeeting(fresh.id)?.status).toBe('ready')
+    expect(db.getMeeting(again.id)?.status).toBe('analyzed')
+  })
+})
+
 describe('tx', () => {
   beforeEach(() => db.openDb(':memory:'))
 

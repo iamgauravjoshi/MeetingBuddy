@@ -92,7 +92,9 @@ CREATE INDEX IF NOT EXISTS proposals_report ON proposals(report_id);
 CREATE INDEX IF NOT EXISTS state_versions_project ON state_versions(project_id, created_at);
 `,
   // 3: why a meeting's transcription or analysis failed, or that it was interrupted
-  `ALTER TABLE meetings ADD COLUMN error TEXT;`
+  `ALTER TABLE meetings ADD COLUMN error TEXT;`,
+  // 4: the target item's version when the proposal was made, so applying can detect it changed since
+  `ALTER TABLE proposals ADD COLUMN target_version INTEGER;`
 ]
 
 export function openDb(file: string): void {
@@ -180,7 +182,7 @@ const toProposal = (r: Row): Proposal => ({
   id: r.id, reportId: r.report_id, meetingId: r.meeting_id, category: r.category, op: r.op,
   targetItemId: r.target_item_id, itemType: r.item_type, title: r.title, body: r.body, owner: r.owner,
   dueDate: r.due_date, speaker: r.speaker, strength: r.strength, confidence: r.confidence, impact: r.impact,
-  rationale: r.rationale, evidence: JSON.parse(r.evidence) as Evidence[], status: r.status
+  rationale: r.rationale, evidence: JSON.parse(r.evidence) as Evidence[], status: r.status, targetVersion: r.target_version ?? null
 })
 
 // ---------- projects ----------
@@ -239,9 +241,18 @@ export function createItem(i: Pick<Item, 'projectId' | 'type' | 'title' | 'body'
   ).run(item.id, item.projectId, item.type, item.title, item.body, item.status, item.owner, item.dueDate, t, t)
   return item
 }
-export function updateItem(iid: string, patch: Partial<Pick<Item, 'title' | 'body' | 'status' | 'owner' | 'dueDate' | 'type'>>): Item {
+type ItemPatch = Partial<Pick<Item, 'title' | 'body' | 'status' | 'owner' | 'dueDate' | 'type'>>
+
+/** The fields of a patch whose values differ from the item. */
+export function changedFields(item: Item, patch: ItemPatch): (keyof ItemPatch)[] {
+  return (Object.keys(patch) as (keyof ItemPatch)[]).filter((k) => patch[k] !== undefined && patch[k] !== item[k])
+}
+
+/** Applies a patch. A patch that changes nothing leaves the item, its version and updatedAt as they are. */
+export function updateItem(iid: string, patch: ItemPatch): Item {
   const cur = getItem(iid)
   if (!cur) throw new Error(`Item ${iid} not found`)
+  if (changedFields(cur, patch).length === 0) return cur
   const next = { ...cur, ...patch }
   db.prepare(
     `UPDATE items SET type = ?, title = ?, body = ?, status = ?, owner = ?, due_date = ?, version = version + 1, updated_at = ?
@@ -262,7 +273,7 @@ export function getItemHistory(iid: string): ItemHistoryEntry[] {
   const rows = db
     .prepare(
       `SELECT h.*, m.title AS meeting_title FROM item_history h LEFT JOIN meetings m ON m.id = h.meeting_id
-       WHERE h.item_id = ? ORDER BY h.at DESC`
+       WHERE h.item_id = ? ORDER BY h.at DESC, h.rowid DESC`
     )
     .all(iid) as Row[]
   return rows.map((r) => ({
@@ -308,6 +319,11 @@ export function recoverInterruptedMeetings(): string[] {
       const what = r.status === 'recording' ? 'The recording was interrupted' : 'Processing was interrupted'
       stmt.run(now(), `${what} when MeetingBuddy closed. The audio saved so far can be transcribed.`, r.id)
     }
+    // an analysis cut off the same way just returns to where it started; the previous report, if any, is intact
+    db.prepare(
+      `UPDATE meetings SET status = CASE WHEN EXISTS (SELECT 1 FROM reports r WHERE r.meeting_id = meetings.id) THEN 'analyzed' ELSE 'ready' END
+       WHERE status = 'analyzing'`
+    ).run()
   })
   return rows.map((r) => r.id as string)
 }
@@ -354,8 +370,8 @@ export function saveReport(
   const rep: Report = { id: id(), meetingId: mid, createdAt: now(), model, summary, droppedCount }
   const stmt = db.prepare(
     `INSERT INTO proposals (id, report_id, meeting_id, category, op, target_item_id, item_type, title, body, owner, due_date,
-       speaker, strength, confidence, impact, rationale, evidence, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
+       speaker, strength, confidence, impact, rationale, evidence, target_version, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
   )
   tx(() => {
     // a meeting keeps only its latest report
@@ -366,7 +382,7 @@ export function saveReport(
     for (const p of proposals) {
       stmt.run(
         id(), rep.id, mid, p.category, p.op, p.targetItemId, p.itemType, p.title, p.body, p.owner, p.dueDate,
-        p.speaker, p.strength, p.confidence, p.impact, p.rationale, JSON.stringify(p.evidence)
+        p.speaker, p.strength, p.confidence, p.impact, p.rationale, JSON.stringify(p.evidence), p.targetVersion
       )
     }
   })

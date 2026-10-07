@@ -75,3 +75,51 @@ describe('deleting meetings removes their audio', () => {
     expect(() => api.appendRecordingChunk('..', 'mic', new Uint8Array([1]))).toThrow()
   })
 })
+
+describe('manual item edits', () => {
+  const task = () => {
+    const p = db.createProject('Edits', '')
+    return api.createItem({ projectId: p.id, type: 'task', title: 'Write spec', body: '', owner: '', dueDate: '' })
+  }
+
+  it('records nothing when the edit changes nothing', () => {
+    const t = task()
+    api.updateItem(t.id, { type: 'task', title: 'Write spec', body: '', owner: '', dueDate: '', status: 'open' })
+    expect(db.getItem(t.id)?.version).toBe(1)
+    expect(db.getItemHistory(t.id).map((h) => h.summary)).toEqual(['Created manually'])
+  })
+
+  it('lists only the fields that changed', () => {
+    const t = task()
+    api.updateItem(t.id, { type: 'task', title: 'Write spec', body: '', owner: 'Rahul', dueDate: '', status: 'open' })
+    expect(db.getItem(t.id)?.version).toBe(2)
+    expect(db.getItemHistory(t.id)[0].summary).toBe('Edited manually: owner')
+  })
+})
+
+describe('proposal edits', () => {
+  const proposal = () => {
+    const p = db.createProject('Proposals', '')
+    const m = db.createMeeting(p.id, 'M', 'analyzed')
+    db.saveReport(m.id, 'mock', 'summary', 0, [
+      {
+        category: 'decision', op: 'create', targetItemId: null, targetVersion: null, itemType: 'decision', title: 'Use Postgres', body: '',
+        owner: '', dueDate: '', speaker: 'Priya', strength: 'firm', confidence: 0.9, impact: 'high', rationale: '', evidence: []
+      }
+    ])
+    return db.getReport(m.id)!.proposals[0]
+  }
+
+  it('cannot mark a proposal as applied from the UI', () => {
+    const p = proposal()
+    expect(() => api.updateProposal(p.id, { status: 'applied' })).toThrow(/applied/i)
+    expect(db.getProposal(p.id)?.status).toBe('pending')
+  })
+
+  it('cannot change a proposal that was already applied', () => {
+    const p = proposal()
+    db.updateProposal(p.id, { status: 'applied' })
+    expect(() => api.updateProposal(p.id, { title: 'Use MySQL' })).toThrow(/already applied/i)
+    expect(db.getProposal(p.id)?.title).toBe('Use Postgres')
+  })
+})

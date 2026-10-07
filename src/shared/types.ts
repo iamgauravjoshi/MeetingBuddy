@@ -61,7 +61,7 @@ export interface ItemHistoryEntry {
   at: string
 }
 
-export type MeetingStatus = 'recording' | 'transcribing' | 'ready' | 'analyzed' | 'applied'
+export type MeetingStatus = 'recording' | 'transcribing' | 'ready' | 'analyzing' | 'analyzed' | 'applied'
 
 export interface Meeting {
   id: string
@@ -136,6 +136,7 @@ export interface Proposal {
   category: ProposalCategory
   op: ProposalOp
   targetItemId: string | null
+  targetVersion: number | null // the target item's version at analysis time; null for reports made before it was recorded
   itemType: ItemType
   title: string
   body: string

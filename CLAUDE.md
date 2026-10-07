@@ -79,7 +79,12 @@ There is no linter configured.
   - user-facing categories: requirement, decision, action_item, scope_change, timeline_change, risk, blocker, open_question, conflict
   - an `op`: create / update / close / supersede / flag
   - an `item_type` that the change creates or modifies
-- **Evidence validation is mandatory.** Each quote must match its cited segment, using `quoteMatches`: an exact match after normalization, or at least 85% of the quote's words found in order. A neighbouring line is also accepted.
+- **Evidence validation is mandatory.** Each quote must match its cited segment (or a neighbouring line) via `matchQuote`, which compares whole words:
+  - at least 3 words, with at least 85% of the quote's words found in order;
+  - the quote must cover at least 75% of the matched transcript span, so scattered words don't count;
+  - a negation (not, no, never, n't…) may not be added or dropped.
+
+  The stored `Evidence.quote` is the **transcript's own span** returned by `matchQuote`, never the model's text.
   - Proposals with no valid evidence are dropped and counted in `report.droppedCount`.
   - Unknown target refs are downgraded to `create`.
   - An unknown speaker falls back to the speaker of the evidence segment.

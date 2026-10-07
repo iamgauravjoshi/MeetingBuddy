@@ -9,7 +9,8 @@ const MODEL_OUTPUT = {
       category: 'scope_change', op: 'create', target_item: null, item_type: 'requirement',
       title: 'Online payments via Razorpay in v1', body: 'Partner clinics require online payment.', owner: '', due_date: '',
       speaker: 'Priya', strength: 'firm', confidence: 0.95, impact: 'high', rationale: 'Adds payments to MVP scope.',
-      evidence: [{ line: 'S1', quote: 'payments are in scope for v1' }]
+      // case and punctuation differ from the transcript on purpose: the stored quote must be the transcript's wording
+      evidence: [{ line: 'S1', quote: 'Payments are in scope for V1!' }]
     },
     {
       category: 'decision', op: 'supersede', target_item: 'DEC-1', item_type: 'decision',
@@ -91,6 +92,8 @@ describe('analyze → approve → apply', () => {
     expect(prompt).toContain('[DEC-1] (decision) Use Firebase for the backend')
     expect(prompt).toContain('[DL-1] (deadline) MVP launch {owner: Priya, due: 2026-11-01}')
     expect(prompt).toContain('[S3 00:17] Priya: Fine. With payments added')
+    // evidence validation rejects shorter quotes, so the model must be told
+    expect(prompt).toContain('at least 3 words')
   })
 
   it('stores validated proposals and drops the fabricated one', () => {
@@ -101,6 +104,13 @@ describe('analyze → approve → apply', () => {
     expect(rep.proposals.find((p) => p.op === 'supersede')?.targetItemId).toBe(ids.firebase)
     expect(rep.proposals.find((p) => p.title === 'Google login')?.strength).toBe('tentative')
     expect(db.getMeeting(meetingId)?.status).toBe('analyzed')
+  })
+
+  it('stores evidence quotes verbatim from the transcript', () => {
+    const rep = db.getReport(meetingId)!
+    const segText = new Map(db.listSegments(meetingId).map((s) => [s.id, s.text]))
+    for (const p of rep.proposals) for (const e of p.evidence) expect(segText.get(e.segmentId)).toContain(e.quote)
+    expect(rep.proposals.find((p) => p.category === 'scope_change')?.evidence[0].quote).toBe('payments are in scope for v1')
   })
 
   it('applies only accepted proposals and records history', () => {

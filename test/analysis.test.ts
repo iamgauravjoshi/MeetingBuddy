@@ -5,7 +5,7 @@ vi.mock('../src/main/db', () => ({}))
 vi.mock('../src/main/llm', () => ({}))
 vi.mock('../src/main/settings', () => ({}))
 
-import { quoteMatches, validateChanges } from '../src/main/analysis'
+import { matchQuote, quoteMatches, validateChanges } from '../src/main/analysis'
 import type { Item, Segment } from '@shared/types'
 
 const seg = (id: string, speaker: string, text: string, t = 0): Segment => ({
@@ -32,6 +32,35 @@ describe('quoteMatches', () => {
   it('tolerates a dropped filler word', () => {
     expect(quoteMatches('we will definitely ship on the twentieth', 'we will um definitely ship it on the twentieth')).toBe(true)
   })
+  it('rejects a quote that inserts a negation', () => {
+    expect(quoteMatches('we will definitely not ship the mobile app on friday', 'We will definitely ship the mobile app on Friday after the review.')).toBe(false)
+  })
+  it('rejects a quote that drops a negation', () => {
+    expect(quoteMatches('we will ship the mobile app on friday after the review', 'We will not ship the mobile app on Friday after the review.')).toBe(false)
+  })
+  it('matches whole words only', () => {
+    expect(quoteMatches('use the budget', 'we waited because the budget froze')).toBe(false)
+  })
+  it('rejects quotes shorter than three words', () => {
+    expect(quoteMatches('use postgres', 'we will use postgres')).toBe(false)
+  })
+  it('rejects quote words scattered across a long line', () => {
+    expect(quoteMatches('we ship app friday', 'we discussed whether to ship the new onboarding flow or the old app before the review on friday')).toBe(false)
+  })
+})
+
+describe('matchQuote', () => {
+  it('returns the transcript wording for an exact match', () => {
+    expect(matchQuote('We will use Postgres!', 'OK, so we will use Postgres for the MVP.')).toBe('we will use Postgres')
+  })
+  it('returns the full transcript span for a fuzzy match', () => {
+    expect(matchQuote('we will definitely ship on the twentieth', 'So, we will um definitely ship it on the twentieth.')).toBe(
+      'we will um definitely ship it on the twentieth'
+    )
+  })
+  it('returns null when the quote is not in the line', () => {
+    expect(matchQuote('we will use MongoDB', 'OK, so we will use Postgres for the MVP.')).toBeNull()
+  })
 })
 
 describe('validateChanges', () => {
@@ -44,6 +73,10 @@ describe('validateChanges', () => {
     const { kept, dropped } = validateChanges([change()], segRef, itemRef, segments)
     expect(dropped).toBe(0)
     expect(kept[0].evidence[0]).toMatchObject({ segmentId: 'a', speaker: 'Priya' })
+  })
+  it('stores the transcript wording, not the model quote', () => {
+    const { kept } = validateChanges([change({ evidence: [{ line: 'S1', quote: 'We will use POSTGRES!' }] })], segRef, itemRef, segments)
+    expect(kept[0].evidence[0].quote).toBe('we will use Postgres')
   })
   it('drops changes whose quotes are not in the transcript', () => {
     const { kept, dropped } = validateChanges([change({ evidence: [{ line: 'S1', quote: 'we will use MongoDB' }] })], segRef, itemRef, segments)

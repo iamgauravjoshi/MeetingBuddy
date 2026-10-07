@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DetectedMeeting, Project, Settings } from '@shared/types'
 import { api, errMsg } from './api'
 import { MeetingRecorder } from './recorder'
-import { ErrorBox, Field, fmtTime, Modal, useEvent, useTick } from './ui'
+import { ErrorBox, Field, fmtTime, Modal, useAction, useEvent, useTick } from './ui'
 import { ProjectView } from './ProjectView'
 import { MeetingView } from './MeetingView'
 import { SettingsView } from './SettingsView'
@@ -61,9 +61,14 @@ export function App() {
     recRef.current = null
     setRec(null)
     window.mb.setRecordingState({ active: false, meetingId: null, projectId: null, startedAt: null })
-    await r.recorder.stop()
-    await api.stopRecording(r.meetingId)
-    setBanner(`${reason ? reason + ' ' : ''}Recording saved. Transcribing and analyzing in the background; you'll get a notification when the report is ready.`)
+    try {
+      await r.recorder.stop()
+      await api.stopRecording(r.meetingId)
+      setBanner(`${reason ? reason + ' ' : ''}Recording saved. Transcribing and analyzing in the background; you'll get a notification when the report is ready.`)
+    } catch (e) {
+      // the audio is on disk either way; the meeting page offers to transcribe it
+      setBanner(`Stopping the recording failed: ${errMsg(e)}`)
+    }
     setView({ kind: 'meeting', meetingId: r.meetingId })
   }, [])
 
@@ -98,8 +103,11 @@ export function App() {
   const markMoment = useCallback(() => {
     const r = recRef.current
     if (!r) return
-    void api.addMark(r.meetingId, r.recorder.elapsed(), 'important')
-    setBanner(`Marked ${fmtTime(r.recorder.elapsed())} as important.`)
+    const t = r.recorder.elapsed()
+    api.addMark(r.meetingId, t, 'important').then(
+      () => setBanner(`Marked ${fmtTime(t)} as important.`),
+      (e) => setBanner(`Marking the moment failed: ${errMsg(e)}`)
+    )
   }, [])
 
   useEvent('hotkey:record', (sourceApp: string) => toggleRecording(sourceApp || ''), [toggleRecording])
@@ -321,6 +329,7 @@ function StartRecordingModal(props: {
 function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Project) => void }) {
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
+  const { run, busy, error } = useAction()
   return (
     <Modal
       title="New project"
@@ -328,7 +337,11 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       footer={
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled={!name.trim()} onClick={async () => onCreated(await api.createProject(name.trim(), desc.trim()))}>
+          <button
+            className="btn primary"
+            disabled={!name.trim() || busy}
+            onClick={() => void run(async () => onCreated(await api.createProject(name.trim(), desc.trim())))}
+          >
             Create
           </button>
         </>
@@ -340,6 +353,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       <Field label="Description, goals and context">
         <textarea className="input" rows={5} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What is this project? Who is it for? What does success look like?" />
       </Field>
+      <ErrorBox error={error} />
     </Modal>
   )
 }

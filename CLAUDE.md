@@ -146,6 +146,19 @@ There is no linter configured.
 
 - `test/analysis.test.ts` and `test/transcript.test.ts` cover pure logic. They `vi.mock` the Electron-dependent modules (`settings`, `db`, `llm`).
 - `test/pipeline.test.ts` runs the real analyze → approve → apply flow on an in-memory `node:sqlite` database with a mock model. Extend it whenever you change prompt refs, validation or apply semantics.
+- `test/apply.test.ts`, `recording.test.ts`, `api.test.ts`, `db.test.ts`, `ipc.test.ts`, `settings.test.ts` and `detector.test.ts` cover the rest of main. Electron is mocked with `vi.mock('electron')` and a temp `userData` folder.
+- **Renderer tests** live in `test/renderer/*.test.tsx`:
+  - They start with `// @vitest-environment jsdom` and use React Testing Library. Main-process tests stay in Node.
+  - `fakeMb()` in `test/renderer/fakeMb.ts` installs a fake `window.mb` that routes each api call to a handler, and fails on calls you didn't expect.
+  - Call `cleanup()` in `afterEach`, because Vitest globals are off.
+
+## Renderer conventions
+
+- **Every user action that calls the api goes through `useAction()`** (in `ui.tsx`):
+  - It shows the error instead of losing it.
+  - Its `busy` flag disables the button, and a second trigger while it runs is ignored, so actions can't double-submit.
+  - Do success-only follow-up, such as closing a dialog, inside the action. A dialog then stays open, with its input, when the save fails.
+  - `MeetingView` uses its own `run(label, fn)` for page-level actions; it also reloads the meeting afterwards.
 
 ## Known limitations
 

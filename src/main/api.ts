@@ -209,7 +209,6 @@ export const api = {
   startRecording: (projectId: string, title: string, sourceApp: string) => {
     const m = db.createMeeting(projectId, title, 'recording', sourceApp)
     mkdirSync(audioDir(m.id), { recursive: true })
-    broadcast('recording:changed', { active: true, meetingId: m.id, projectId, startedAt: Date.now() })
     return m
   },
   /** Live preview: transcribe a ~30 s chunk and append it to the transcript. */
@@ -243,7 +242,6 @@ export const api = {
   addMark: (meetingId: string, t: number, kind: string) => db.addMark(meetingId, t, kind),
   stopRecording: (meetingId: string) => {
     db.updateMeeting(meetingId, { endedAt: new Date().toISOString(), status: 'transcribing' })
-    broadcast('recording:changed', { active: false, meetingId: null, projectId: null, startedAt: null })
     void finishMeeting(meetingId)
   },
 

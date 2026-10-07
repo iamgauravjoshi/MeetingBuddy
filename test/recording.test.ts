@@ -12,10 +12,12 @@ const userData = vi.hoisted(() => {
 const settings = vi.hoisted(() => ({ sttProvider: 'deepgram', selfName: 'Me' }) as Record<string, unknown>)
 const transcribe = vi.hoisted(() => vi.fn())
 const analyzeMeeting = vi.hoisted(() => vi.fn(async () => null))
+// channels broadcast to the (fake) app window
+const sent = vi.hoisted(() => [] as string[])
 
 vi.mock('electron', () => ({
   app: { getPath: () => userData },
-  BrowserWindow: { getAllWindows: () => [] },
+  BrowserWindow: { getAllWindows: () => [{ webContents: { send: (channel: string) => sent.push(channel) } }] },
   Notification: { isSupported: () => false },
   dialog: { showOpenDialog: vi.fn() }
 }))
@@ -156,5 +158,16 @@ describe('importing a recording', () => {
 
     await expect(api.importAudio(projectId)).rejects.toThrow(/25 MB/)
     expect(transcribe).not.toHaveBeenCalled()
+  })
+})
+
+describe('events', () => {
+  it('does not broadcast recording:changed, which nothing listens to', async () => {
+    sent.length = 0
+    const m = api.startRecording(projectId, 'T', '')
+    api.stopRecording(m.id)
+    await settled(m.id)
+    expect(sent).not.toContain('recording:changed')
+    expect(sent).toContain('meeting:changed')
   })
 })

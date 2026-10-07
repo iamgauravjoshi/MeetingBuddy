@@ -83,7 +83,7 @@ Choose an op for each change:
 Rules:
 - Only report real changes to the project. Ignore small talk, status updates that change nothing, and things already in the project state unchanged.
 - Do not duplicate existing items. If the meeting refines an existing item, use update on that item's ID.
-- evidence: 1-3 VERBATIM quotes copied exactly from the transcript, each with the line ID it came from. Never paraphrase inside a quote. Changes without evidence will be discarded.
+- evidence: 1-3 VERBATIM quotes copied exactly from the transcript, each at least 3 words long and with the line ID it came from. Never paraphrase inside a quote, and never add or drop words such as "not". Changes without evidence will be discarded.
 - speaker: the name of the person who made the statement, exactly as written in the transcript.
 - strength: "firm" for decisions, commitments and definite statements; "tentative" for hedged ideas ("maybe", "we could", "let's think about").
 - item_type: the kind of project item this change creates or modifies (requirement, decision, task, risk, deadline, question). Blockers are risks; open questions are questions; scope changes are usually requirements; timeline changes are usually deadlines.
@@ -119,33 +119,73 @@ type RawChange = z.infer<typeof changeSchema>
 
 // ---------- evidence validation ----------
 
-const norm = (s: string): string =>
-  s
-    .toLowerCase()
-    .replace(/[’‘]/g, "'")
-    .replace(/[^\p{L}\p{N}' ]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+const MIN_QUOTE_WORDS = 3
+const MIN_QUOTE_FOUND = 0.85 // share of the quote's words that must appear in the line, in order
+const MIN_SPAN_COVERED = 0.75 // share of the matched transcript span that the quote must cover
 
-/** True if the quote really appears in the segment (exact after normalisation, or ≥85% of its words in order). */
-export function quoteMatches(quote: string, segmentText: string): boolean {
-  const q = norm(quote)
-  const t = norm(segmentText)
-  if (!q) return false
-  if (t.includes(q)) return true
-  const qw = q.split(' ')
-  const tw = t.split(' ')
-  let j = 0
-  let hit = 0
-  for (const w of qw) {
-    const k = tw.indexOf(w, j)
-    if (k !== -1) {
-      hit++
-      j = k + 1
-    }
-  }
-  return qw.length >= 3 && hit / qw.length >= 0.85
+// Words that flip a statement's meaning. A quote may never add one or leave one out.
+const NEGATIONS = new Set([
+  'not', 'no', 'never', 'none', 'nobody', 'nothing', 'neither', 'nor', 'cannot', 'without',
+  // "n't" forms typed without the apostrophe
+  'dont', 'doesnt', 'didnt', 'wont', 'cant', 'couldnt', 'shouldnt', 'wouldnt', 'isnt', 'arent', 'wasnt', 'werent',
+  'havent', 'hasnt', 'hadnt', 'aint'
+])
+const isNegation = (w: string): boolean => NEGATIONS.has(w) || w.endsWith("n't")
+
+interface Token {
+  word: string
+  start: number
+  end: number
 }
+
+/** Whole words with their character offsets; lower-cased, with curly apostrophes straightened. */
+function tokenize(s: string): Token[] {
+  return [...s.matchAll(/[\p{L}\p{N}]+(?:['’‘][\p{L}\p{N}]+)*/gu)].map((m) => ({
+    word: m[0].toLowerCase().replace(/[’‘]/g, "'"),
+    start: m.index,
+    end: m.index + m[0].length
+  }))
+}
+
+/**
+ * Finds the quote in a transcript line and returns the line's own wording for it, or null.
+ * A match needs ≥3 words, ≥85% of the quote's words in order, a span the quote covers ≥75%,
+ * and no negation added or dropped. Callers store the returned span, never the model's quote.
+ */
+export function matchQuote(quote: string, segmentText: string): string | null {
+  const q = tokenize(quote).map((t) => t.word)
+  const t = tokenize(segmentText)
+  if (q.length < MIN_QUOTE_WORDS) return null
+
+  let best: { first: number; last: number; hits: number } | null = null
+  // try every alignment that starts on a quote word, so an early common word can't stretch the span
+  for (let s = 0; s < t.length; s++) {
+    if (!q.includes(t[s].word)) continue
+    const matched = new Set<number>()
+    let negationMissing = false
+    let j = s
+    for (const w of q) {
+      let k = j
+      while (k < t.length && t[k].word !== w) k++
+      if (k < t.length) {
+        matched.add(k)
+        j = k + 1
+      } else if (isNegation(w)) negationMissing = true
+    }
+    if (negationMissing || matched.size === 0) continue
+    const first = Math.min(...matched)
+    const last = Math.max(...matched)
+    let negationSkipped = false
+    for (let k = first; k <= last; k++) if (!matched.has(k) && isNegation(t[k].word)) negationSkipped = true
+    const hits = matched.size
+    if (negationSkipped || hits / q.length < MIN_QUOTE_FOUND || hits / (last - first + 1) < MIN_SPAN_COVERED) continue
+    if (!best || hits > best.hits || (hits === best.hits && last - first < best.last - best.first)) best = { first, last, hits }
+  }
+  return best ? segmentText.slice(t[best.first].start, t[best.last].end) : null
+}
+
+/** True if the quote really appears in the segment (see matchQuote). */
+export const quoteMatches = (quote: string, segmentText: string): boolean => matchQuote(quote, segmentText) !== null
 
 const DEFAULT_TYPE: Record<ProposalCategory, ItemType> = {
   requirement: 'requirement',
@@ -175,13 +215,17 @@ export function validateChanges(
     const evidence: Evidence[] = []
     for (const e of c.evidence) {
       const ref = e.line.trim().replace(/^\[|\]$/g, '').split(/\s/)[0].toUpperCase()
-      let seg = segRef.get(ref)
+      const cited = segRef.get(ref)
+      if (!cited) continue
       // the model sometimes cites the neighbouring line; check one line either side
-      if (seg && !quoteMatches(e.quote, seg.text)) {
-        const n = Number(ref.slice(1))
-        seg = [segRef.get(`S${n - 1}`), segRef.get(`S${n + 1}`)].find((s) => s && quoteMatches(e.quote, s.text))
+      const n = Number(ref.slice(1))
+      for (const seg of [cited, segRef.get(`S${n - 1}`), segRef.get(`S${n + 1}`)]) {
+        const quote = seg ? matchQuote(e.quote, seg.text) : null
+        if (seg && quote) {
+          evidence.push({ segmentId: seg.id, quote, speaker: seg.speaker, t: seg.tStart })
+          break
+        }
       }
-      if (seg) evidence.push({ segmentId: seg.id, quote: e.quote.trim(), speaker: seg.speaker, t: seg.tStart })
     }
     if (evidence.length === 0) {
       dropped++

@@ -38,6 +38,7 @@ export function Modal({ title, onClose, children, footer }: { title: string; onC
     return () => window.removeEventListener('keydown', h)
   }, [onClose])
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: clicking the backdrop is a mouse shortcut; keyboard users close with Escape (above) or the ✕ button
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="row">
@@ -70,6 +71,7 @@ export function clickable(onActivate: () => void) {
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: the control is passed in as children, which the rule can't see
     <label className="field">
       <span>{label}</span>
       {children}
@@ -99,5 +101,6 @@ export function useTick(ms: number, enabled = true): number {
 
 /** Subscribes to a main-process event for the lifetime of the component. */
 export function useEvent<K extends keyof MainEvents>(channel: K, cb: (...args: MainEvents[K]) => void, deps: unknown[] = []): void {
-  useEffect(() => window.mb.on(channel, cb), deps) // eslint-disable-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the caller lists what `cb` depends on in `deps`
+  useEffect(() => window.mb.on(channel, cb), deps)
 }

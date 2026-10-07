@@ -57,19 +57,20 @@ export function MeetingView(props: {
   const [skipped, setSkipped] = useState<{ proposalId: string; title: string; reason: string }[]>([])
   const transcriptRef = useRef<HTMLDivElement>(null)
 
+  const { meetingId, onLoaded } = props
   const load = useCallback(async () => {
-    const m = await api.getMeeting(props.meetingId)
+    const m = await api.getMeeting(meetingId)
     if (!m) return
     setMeeting(m)
-    props.onLoaded(m.projectId)
-    const t = await api.getTranscript(props.meetingId)
+    onLoaded(m.projectId)
+    const t = await api.getTranscript(meetingId)
     setSegments(t.segments)
     setMarks(t.marks)
-    setReport(await api.getReport(props.meetingId))
+    setReport(await api.getReport(meetingId))
     setItems(await api.listItems(m.projectId))
     setStakeholders(await api.listStakeholders(m.projectId))
-    setHasAudio(await api.hasRecording(props.meetingId))
-  }, [props.meetingId])
+    setHasAudio(await api.hasRecording(meetingId))
+  }, [meetingId, onLoaded])
   useEffect(() => void load(), [load])
   useEvent('meeting:changed', (id: string) => id === props.meetingId && void load(), [load])
   useEvent(
@@ -374,6 +375,7 @@ function ProposalCard(props: {
       </div>
       {p.rationale && <div className="small muted">{p.rationale}</div>}
       {p.evidence.map((e, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a proposal's evidence list never changes or reorders
         <div key={i} className="quote small" title="Show in transcript" {...clickable(() => props.onJump(e.segmentId))}>
           “{e.quote}” <span className="muted">— {e.speaker} @ {fmtTime(e.t)}</span>
         </div>

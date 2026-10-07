@@ -1,0 +1,67 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  // Biome lints and formats without loading TypeScript, which matters here: TypeScript 7 is the native port and
+  // has no JS API for typescript-eslint to use.
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["**", "!out", "!release", "!.agents", "!skills-lock.json", "!package-lock.json"]
+  },
+  // import sorting is off to keep diffs about behaviour
+  "assist": { "enabled": false },
+  // matches the existing style: 2 spaces, single quotes, no semicolons, no trailing commas
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 140 },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "asNeeded",
+      "trailingCommas": "none",
+      "arrowParentheses": "always"
+    }
+  },
+  // styles.css is hand-compacted one rule per line on purpose
+  "css": { "formatter": { "enabled": false } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        // there are no <form> elements, so a button can't accidentally submit one
+        "useButtonType": "off",
+        // dialogs move focus to their first field when they open, as dialogs should
+        "noAutofocus": "off"
+      },
+      // `!` is used deliberately where strict TypeScript can't see an invariant
+      "style": { "noNonNullAssertion": "off" }
+    }
+  },
+  "overrides": [
+    {
+      // test doubles are loosely typed on purpose
+      "includes": ["test/**"],
+      "linter": { "rules": { "suspicious": { "noExplicitAny": "off" } } }
+    },
+    {
+      // the renderer runs sandboxed without Node.js (see sandbox: true in src/main/index.ts)
+      "includes": ["src/renderer/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Buffer": "The renderer is sandboxed and has no Node.js; use Uint8Array.",
+                  "process": "The renderer is sandboxed and has no Node.js.",
+                  "require": "The renderer is sandboxed and has no Node.js; use import.",
+                  "__dirname": "The renderer is sandboxed and has no Node.js.",
+                  "global": "The renderer is sandboxed; use window or globalThis."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

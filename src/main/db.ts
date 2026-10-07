@@ -142,6 +142,7 @@ function backup(file: string, version: number): void {
 
 const now = (): string => new Date().toISOString()
 const id = (): string => randomUUID()
+// biome-ignore lint/suspicious/noExplicitAny: raw SQLite rows; the to* mappers below give them their types
 type Row = Record<string, any>
 
 /** Runs fn in a transaction. Nested calls become savepoints, so a failing inner call rolls back only its own work. */

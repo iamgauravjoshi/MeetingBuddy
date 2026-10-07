@@ -33,7 +33,8 @@ function buildRefs(items: Item[], segments: Segment[]) {
   const counters: Partial<Record<ItemType, number>> = {}
   const itemLines: string[] = []
   for (const it of items) {
-    const n = (counters[it.type] = (counters[it.type] ?? 0) + 1)
+    const n = (counters[it.type] ?? 0) + 1
+    counters[it.type] = n
     const ref = `${TYPE_PREFIX[it.type]}-${n}`
     itemRef.set(ref, it)
     const meta = [it.status !== 'open' && `status: ${it.status}`, it.owner && `owner: ${it.owner}`, it.dueDate && `due: ${it.dueDate}`]

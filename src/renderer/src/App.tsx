@@ -64,7 +64,7 @@ export function App() {
     try {
       await r.recorder.stop()
       await api.stopRecording(r.meetingId)
-      setBanner(`${reason ? reason + ' ' : ''}Recording saved. Transcribing and analyzing in the background; you'll get a notification when the report is ready.`)
+      setBanner(`${reason ? `${reason} ` : ''}Recording saved. Transcribing and analyzing in the background; you'll get a notification when the report is ready.`)
     } catch (e) {
       // the audio is on disk either way; the meeting page offers to transcribe it
       setBanner(`Stopping the recording failed: ${errMsg(e)}`)
@@ -270,7 +270,7 @@ function StartRecordingModal(props: {
 }) {
   const [pid, setPid] = useState(props.defaultProjectId ?? '')
   const today = new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  const [title, setTitle] = useState(`${props.sourceApp ? props.sourceApp.replace(/ \(.*\)/, '') + ' meeting' : 'Meeting'} · ${today}`)
+  const [title, setTitle] = useState(`${props.sourceApp ? `${props.sourceApp.replace(/ \(.*\)/, '')} meeting` : 'Meeting'} · ${today}`)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

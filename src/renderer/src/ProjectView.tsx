@@ -462,6 +462,7 @@ function History({ projectId, onOpenMeeting }: { projectId: string; onOpenMeetin
           {v.changes.map((c, i) => {
             const [label, color] = OP_LABEL[c.op] ?? [c.op, '']
             return (
+              // biome-ignore lint/suspicious/noArrayIndexKey: a stored state version's change list never changes or reorders
               <div key={i} className="row small">
                 <span className={`badge ${color}`}>{label}</span>
                 <span className="muted">{c.itemType}</span>

@@ -6,7 +6,7 @@ const toSec = (t: string): number => {
 }
 
 const TIME_RANGE = /^(\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{1,3}\s*-->\s*((\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{1,3})/
-const SPEAKER_LINE = /^(?:\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*[-–]?\s*)?([^:\[\]]{1,40}?):\s+(.+)$/
+const SPEAKER_LINE = /^(?:\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*[-–]?\s*)?([^:[\]]{1,40}?):\s+(.+)$/
 const ZOOM_HEADER = /^\[(.+?)\]\s+(\d{1,2}:\d{2}(?::\d{2})?)$/
 
 // "Decision: …", "Action item: …" and similar note labels look like "Name: text" but aren't speakers;
@@ -39,7 +39,7 @@ export function parseTranscript(raw: string): RawSegment[] {
     const end = t1 ?? start + Math.max(3, clean.split(/\s+/).length / 2.5)
     // merge consecutive cues from the same speaker
     if (prev && prev.speaker === speaker && start - prev.tEnd < 2) {
-      prev.text += ' ' + clean
+      prev.text += ` ${clean}`
       prev.tEnd = end
     } else out.push({ speaker: speaker || 'Unknown', tStart: start, tEnd: end, text: clean, source: 'manual' })
   }

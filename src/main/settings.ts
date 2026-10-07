@@ -1,7 +1,8 @@
 import { app, safeStorage } from 'electron'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_MODELS, type LlmProvider, type Settings, type SttProvider } from '@shared/types'
+import { SETTINGS_FIELDS } from './ipc'
 
 type StoredSettings = Omit<Settings, 'hasKey'>
 type SecretName = LlmProvider | SttProvider
@@ -30,6 +31,27 @@ function readJson<T>(file: string, fallback: T): T {
   }
 }
 
+/** Writes to a temporary file, then renames it over the target, so a crash mid-write never leaves a half-written file. */
+function writeJsonAtomic(file: string, value: unknown): void {
+  const tmp = `${file}.${process.pid}.tmp`
+  try {
+    writeFileSync(tmp, JSON.stringify(value, null, 2))
+    renameSync(tmp, file)
+  } finally {
+    rmSync(tmp, { force: true })
+  }
+}
+
+/** settings.json with only known keys; a value that isn't allowed (e.g. edited by hand) falls back to its default. */
+function readSettings(): StoredSettings {
+  const stored = readJson<Record<string, unknown>>(settingsFile(), {})
+  const out: Record<string, unknown> = { ...DEFAULTS }
+  for (const k of Object.keys(DEFAULTS) as (keyof StoredSettings)[]) {
+    if (k in stored && SETTINGS_FIELDS[k].safeParse(stored[k]).success) out[k] = stored[k]
+  }
+  return out as StoredSettings
+}
+
 // API keys are encrypted with the OS credential store (DPAPI on Windows, Keychain on macOS)
 // and never sent to the renderer.
 function readSecrets(): Record<string, string> {
@@ -51,18 +73,17 @@ export function setSecret(name: SecretName, value: string): void {
   const secrets = readSecrets()
   if (value) secrets[name] = safeStorage.encryptString(value).toString('base64')
   else delete secrets[name]
-  writeFileSync(secretsFile(), JSON.stringify(secrets, null, 2))
+  writeJsonAtomic(secretsFile(), secrets)
 }
 
 export function getSettings(): Settings {
-  const s = readJson<StoredSettings>(settingsFile(), DEFAULTS)
+  const s = readSettings()
   const secrets = readSecrets()
   const hasKey = Object.fromEntries(Object.keys(secrets).map((k) => [k, true]))
   return { ...s, hasKey }
 }
 
 export function saveSettings(patch: Partial<StoredSettings>): Settings {
-  const { hasKey: _ignored, ...cur } = getSettings()
-  writeFileSync(settingsFile(), JSON.stringify({ ...cur, ...patch }, null, 2))
+  writeJsonAtomic(settingsFile(), { ...readSettings(), ...patch })
   return getSettings()
 }

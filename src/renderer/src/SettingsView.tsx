@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { DEFAULT_MODELS, type LlmProvider, type Settings, type SttProvider } from '@shared/types'
+import { DEFAULT_MODELS, type LlmProvider, type Settings, type SttProvider, type Theme } from '@shared/types'
 import { api, errMsg } from './api'
 import { ErrorBox, Field } from './ui'
 
@@ -201,6 +201,18 @@ export function SettingsView({ onSaved }: { onSaved: (s: Settings) => void }) {
         <div className="muted small">
           Format: Electron accelerators, e.g. CommandOrControl+Shift+M or Alt+F9. Hotkeys work even when MeetingBuddy is in the tray.
         </div>
+      </div>
+
+      {/* temporary until the Settings page is rebuilt with an Appearance section (DESIGN.md §9, Step 3) */}
+      <div className="card col">
+        <h2>Appearance</h2>
+        <Field label="Theme">
+          <select className="input" value={s.theme} onChange={(e) => update({ theme: e.target.value as Theme })}>
+            <option value="system">System (follow Windows)</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </Field>
       </div>
 
       <div className="row">

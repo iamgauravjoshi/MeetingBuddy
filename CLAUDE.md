@@ -148,6 +148,7 @@ To run the app against throwaway data instead of `%APPDATA%\MeetingBuddy`, pass 
   - Both files are written atomically (a temp file, then a rename).
   - On read, unknown keys are dropped, and values that fail `SETTINGS_FIELDS` in `ipc.ts` fall back to their defaults. For example, `chunkSeconds` must be 0 or 10–120.
   - LLM and STT keys share one secrets map, keyed by provider id.
+  - `theme` (`system`/`light`/`dark`) is applied with `nativeTheme.themeSource` (`applyTheme`, at startup and on save). The renderer only reads `prefers-color-scheme`, and the window's `backgroundColor` follows `nativeTheme`, so there's no flash at launch.
 - `llm.ts` builds the model from settings. OpenRouter, Ollama and custom endpoints all go through `@ai-sdk/openai-compatible`.
 - `stt.ts` calls Deepgram REST directly (with `diarize` only for the system stream) or an OpenAI-compatible `/audio/transcriptions` endpoint (OpenAI/Groq, without diarization).
   - The Whisper upload is named after its real format (for example `audio.mp3`), because those endpoints detect the format from the file name.
@@ -164,6 +165,11 @@ To run the app against throwaway data instead of `%APPDATA%\MeetingBuddy`, pass 
   - Call `cleanup()` in `afterEach`, because Vitest globals are off.
 
 ## Renderer conventions
+
+- **The UI is being redesigned in steps; `DESIGN.md` is the spec** (tokens, components, folder structure, migration order).
+  - Styling is Tailwind CSS v4 (`@tailwindcss/vite`) on the tokens in `src/renderer/src/styles/tokens.css`. Tailwind's default colours, fonts and breakpoints are cleared (`styles/theme.css`), so only semantic utilities like `bg-surface` and `text-fg-secondary` exist.
+  - The old `styles.css` is unlayered, so it overrides Tailwind until each screen is rebuilt; it is deleted at the end.
+  - `test/renderer/contrast.test.ts` checks the tokens against WCAG AA in both themes. Change a colour, run it.
 
 - **Every user action that calls the api goes through `useAction()`** (in `ui.tsx`):
   - It shows the error instead of losing it.

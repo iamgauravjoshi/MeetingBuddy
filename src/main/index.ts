@@ -7,6 +7,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   Notification,
   session,
   shell,
@@ -17,7 +18,7 @@ import { pathToFileURL } from 'node:url'
 import { openDb, recoverInterruptedMeetings } from './db'
 import { api, broadcast, removeOrphanedAudio, setShowMainWindow } from './api'
 import { MeetingDetector } from './detector'
-import { getSettings } from './settings'
+import { applyTheme, getSettings } from './settings'
 import { isSafeExternalUrl, isTrustedAppUrl, parseApiArgs, RECORDING_STATE } from './ipc'
 import type { DetectedMeeting, RecordingState } from '@shared/types'
 
@@ -42,6 +43,9 @@ function showWindow(): void {
   win.focus()
 }
 
+// the window's colour before the page paints, matching --color-canvas in src/renderer/src/styles/tokens.css
+const canvasColor = (): string => (nativeTheme.shouldUseDarkColors ? '#0e0f0f' : '#f9f9f9')
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1280,
@@ -49,7 +53,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     title: 'MeetingBuddy',
-    backgroundColor: '#0f1115',
+    backgroundColor: canvasColor(),
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -251,6 +255,9 @@ app.whenReady().then(() => {
     { useSystemPicker: false }
   )
 
+  // before the window exists, so it opens in the user's theme instead of flashing the other one
+  applyTheme()
+  nativeTheme.on('updated', () => win?.setBackgroundColor(canvasColor()))
   createWindow()
   tray = new Tray(trayIcon(false))
   tray.on('click', showWindow)

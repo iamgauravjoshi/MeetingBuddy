@@ -1,4 +1,4 @@
-import { app, safeStorage } from 'electron'
+import { app, nativeTheme, safeStorage } from 'electron'
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_MODELS, type LlmProvider, type Settings, type SttProvider } from '@shared/types'
@@ -17,7 +17,8 @@ const DEFAULTS: StoredSettings = {
   hotkeyRecord: 'CommandOrControl+Shift+M',
   hotkeyMark: 'CommandOrControl+Shift+D',
   chunkSeconds: 30,
-  selfName: 'Me'
+  selfName: 'Me',
+  theme: 'system'
 }
 
 const settingsFile = (): string => join(app.getPath('userData'), 'settings.json')
@@ -85,5 +86,14 @@ export function getSettings(): Settings {
 
 export function saveSettings(patch: Partial<StoredSettings>): Settings {
   writeJsonAtomic(settingsFile(), { ...readSettings(), ...patch })
+  if (patch.theme) applyTheme()
   return getSettings()
+}
+
+/**
+ * Applies the theme setting to Chromium: 'system' follows Windows, 'light'/'dark' force it. The renderer only reads
+ * `prefers-color-scheme`, so this one call switches the whole UI, including native scrollbars and form controls.
+ */
+export function applyTheme(): void {
+  nativeTheme.themeSource = readSettings().theme
 }

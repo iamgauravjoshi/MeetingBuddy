@@ -28,6 +28,7 @@ export const SETTINGS: Settings = {
   hotkeyMark: 'CommandOrControl+Shift+D',
   chunkSeconds: 30,
   selfName: 'Me',
+  theme: 'system',
   hasKey: {}
 }
 

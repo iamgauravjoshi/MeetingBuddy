@@ -1,0 +1,32 @@
+/*
+ * Tailwind configuration (DESIGN.md §5.1). Imported before tokens.css: it clears Tailwind's default scales, so the
+ * only colours, fonts, weights, radii, shadows, easings and breakpoints that exist are the ones tokens.css defines.
+ * A raw `bg-gray-100` or a phone-sized `md:` simply doesn't compile to anything.
+ * Spacing keeps Tailwind's default 4px scale, which matches the kit's Padding/* tokens.
+ */
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --font-weight-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --ease-*: initial;
+  --breakpoint-*: initial;
+}
+
+/* Tailwind has no theme namespace for durations, so the motion tokens get their own utilities */
+@utility duration-instant {
+  transition-duration: var(--dur-instant);
+}
+@utility duration-fast {
+  transition-duration: var(--dur-fast);
+}
+@utility duration-base {
+  transition-duration: var(--dur-base);
+}
+@utility duration-slow {
+  transition-duration: var(--dur-slow);
+}

@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 const shared = { '@shared': resolve('src/shared') }
 
@@ -9,6 +10,6 @@ export default defineConfig({
   preload: { resolve: { alias: shared } },
   renderer: {
     resolve: { alias: shared },
-    plugins: [react()]
+    plugins: [react(), tailwindcss()]
   }
 })

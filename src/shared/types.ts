@@ -166,6 +166,7 @@ export interface StateVersion {
 
 export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'openrouter' | 'ollama' | 'openai-compatible'
 export type SttProvider = 'none' | 'deepgram' | 'openai' | 'groq'
+export type Theme = 'system' | 'light' | 'dark'
 
 export interface Settings {
   llmProvider: LlmProvider
@@ -178,6 +179,7 @@ export interface Settings {
   hotkeyMark: string
   chunkSeconds: number
   selfName: string // label for the local mic stream
+  theme: Theme // 'system' follows the Windows light/dark setting
   // which secrets are stored (values never leave the main process)
   hasKey: Partial<Record<LlmProvider | SttProvider, boolean>>
 }

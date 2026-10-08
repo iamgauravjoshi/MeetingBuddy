@@ -41,7 +41,8 @@ export const SETTINGS_FIELDS = {
     .number()
     .int()
     .refine((n) => n === 0 || (n >= 10 && n <= 120), 'Live transcript chunks must be 0 (off) or 10–120 seconds'),
-  selfName: z.string().max(100)
+  selfName: z.string().max(100),
+  theme: z.enum(['system', 'light', 'dark'])
 }
 
 /** Argument schemas for every api function, in order. The type check below makes a missing or mismatched schema a compile error. */

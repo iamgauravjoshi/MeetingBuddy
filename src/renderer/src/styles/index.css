@@ -1,0 +1,7 @@
+/* The renderer's stylesheet entry (DESIGN.md §5.1). Order matters: theme.css clears Tailwind's defaults before tokens.css fills them. */
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "./theme.css";
+@import "./tokens.css";
+@import "./base.css";

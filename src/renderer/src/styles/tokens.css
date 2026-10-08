@@ -1,0 +1,300 @@
+/*
+ * Design tokens (DESIGN.md §2). Light values live in @theme, so each one is also a Tailwind utility
+ * (--color-surface → bg-surface, --text-title → text-title, --radius-xl → rounded-xl). Dark values override the
+ * same variables under prefers-color-scheme, which main drives from the theme setting (nativeTheme.themeSource).
+ *
+ * There is deliberately no raw palette (gray-100, green-500…): components can only reach semantic tokens.
+ * The comments name the Figma kit variable each value came from; "derived" values were added to pass WCAG AA,
+ * which test/renderer/contrast.test.ts checks for both themes.
+ */
+
+/* `static` emits every variable, used or not: the legacy styles.css and the contrast test read them directly */
+@theme static {
+  /* ---------- surfaces ---------- */
+  --color-canvas: #f9f9f9; /* Background/bg-primary */
+  --color-surface: #ffffff; /* Background/bg-secondary */
+  --color-raised: #ffffff;
+  --color-hover: #fafafa; /* Background/bg-primary-hover */
+  --color-selected: #f1f1f1; /* Background/bg-secondary-hover */
+  --color-inset: #f9f9f9;
+  --color-disabled: #e5e5e5; /* Background/bg-disabled */
+  --color-overlay: rgb(17 17 17 / 0.4);
+
+  /* ---------- lines ---------- */
+  --color-line: #e9e9e9; /* Border/border-secondary */
+  --color-line-strong: #d4d4d4; /* derived */
+  --color-line-hover: #8e8e8e; /* Border/border-focused */
+
+  /* ---------- text and icons ---------- */
+  --color-fg: #111111; /* Gray/900 */
+  --color-fg-secondary: #575757; /* Text/tertiary */
+  --color-fg-tertiary: #696e6e; /* derived from Text/disabled #717676, which fails 4.5:1 on the canvas */
+  --color-fg-disabled: #8e8e8e; /* Icon/disabled; disabled text is exempt from contrast */
+  --color-fg-inverse: #ffffff;
+  --color-icon: #373737; /* Icon/secondary */
+  --color-white: #ffffff;
+
+  /* ---------- brand and accent ---------- */
+  --color-accent: #007e4b; /* Primary/600: white text on the kit's #009d5e is only ~3.5:1 */
+  --color-accent-hover: #006640; /* derived */
+  --color-accent-soft: #e6f5ef; /* Badge/Primary-shade */
+  --color-accent-fg: #007e4b;
+  --color-brand: #009d5e; /* Primary/500, for non-text marks only */
+  --color-focus: #009d5e;
+
+  /*
+   * ---------- hues: soft (tinted background), line (border), fg (text on soft), solid (fill), on (text on solid) ----------
+   * Used through the semantic roles below and the domain badges; never pick a hue directly for meaning.
+   */
+  --color-red-soft: #f9ebeb; /* Badge/Red-shade */
+  --color-red-line: #e8aeae; /* Badge/Red-border */
+  --color-red-fg: #9e2a2a; /* Red/600 */
+  --color-red-solid: #c63435; /* Badge/Red */
+  --color-red-on: #ffffff;
+
+  --color-green-soft: #edf6f3; /* Badge/success-shade */
+  --color-green-line: #b5ddcd; /* Badge/success-border */
+  --color-green-fg: #1f6b4e; /* derived: Badge/success #46a983 is ~2.9:1 on its shade */
+  --color-green-solid: #007e4b; /* Primary/600 */
+  --color-green-on: #ffffff;
+
+  --color-yellow-soft: #fff8ec; /* Badge/Yellow-shade */
+  --color-yellow-line: #ffe3b4; /* Badge/Yellow-border */
+  --color-yellow-fg: #5f4314; /* Yellow/900 */
+  --color-yellow-solid: #ffb844; /* Badge/Yellow */
+  --color-yellow-on: #3d2a07; /* derived: white on yellow is unreadable */
+
+  --color-blue-soft: #e8f3fd; /* Badge/Blue-shade */
+  --color-blue-line: #a1d1f5; /* Badge/Blue-border */
+  --color-blue-fg: #175ba8; /* derived */
+  --color-blue-solid: #1f6fd1; /* derived */
+  --color-blue-on: #ffffff;
+
+  --color-purple-soft: #f6e9fe; /* Badge/Purple-shadeor */
+  --color-purple-line: #dba8fa; /* Badge/Purple-border */
+  --color-purple-fg: #6f19a6; /* derived */
+  --color-purple-solid: #831ec2; /* Purple/600 */
+  --color-purple-on: #ffffff;
+
+  --color-pink-soft: #ffedff; /* Badge/Pink-shade */
+  --color-pink-line: #ffb9fe; /* Badge/Pink-border */
+  --color-pink-fg: #8f1f8c; /* derived */
+  --color-pink-solid: #b02bad; /* derived */
+  --color-pink-on: #ffffff;
+
+  --color-orange-soft: #fef2e9; /* Badge/Orange-shade */
+  --color-orange-line: #fbcba7; /* Badge/Orange-border */
+  --color-orange-fg: #94480f; /* derived */
+  --color-orange-solid: #ad5518; /* derived */
+  --color-orange-on: #ffffff;
+
+  --color-teal-soft: #ecfafd; /* Badge/Teal-shade */
+  --color-teal-line: #b1eaf6; /* Badge/Teal-border */
+  --color-teal-fg: #1d6575; /* derived */
+  --color-teal-solid: #237a8c; /* derived */
+  --color-teal-on: #ffffff;
+
+  --color-neutral-soft: #f1f1f1; /* Gray/100 */
+  --color-neutral-line: #e5e5e5; /* Gray/300 */
+  --color-neutral-fg: #373737; /* Icon/secondary */
+  --color-neutral-solid: #111111; /* Gray/900 */
+  --color-neutral-on: #ffffff;
+
+  /* ---------- semantic roles ---------- */
+  --color-success-soft: var(--color-green-soft);
+  --color-success-line: var(--color-green-line);
+  --color-success-fg: var(--color-green-fg);
+  --color-success-solid: var(--color-green-solid);
+  --color-success-on: var(--color-green-on);
+
+  --color-warning-soft: var(--color-yellow-soft);
+  --color-warning-line: var(--color-yellow-line);
+  --color-warning-fg: var(--color-yellow-fg);
+  --color-warning-solid: var(--color-yellow-solid);
+  --color-warning-on: var(--color-yellow-on);
+
+  --color-danger-soft: var(--color-red-soft);
+  --color-danger-line: var(--color-red-line);
+  --color-danger-fg: var(--color-red-fg);
+  --color-danger-solid: var(--color-red-solid);
+  --color-danger-on: var(--color-red-on);
+
+  --color-info-soft: var(--color-blue-soft);
+  --color-info-line: var(--color-blue-line);
+  --color-info-fg: var(--color-blue-fg);
+  --color-info-solid: var(--color-blue-solid);
+  --color-info-on: var(--color-blue-on);
+
+  /* recording only; the same hue as danger today, but separate so it can diverge */
+  --color-record-soft: var(--color-red-soft);
+  --color-record-line: var(--color-red-line);
+  --color-record-fg: var(--color-red-fg);
+  --color-record-solid: var(--color-red-solid);
+  --color-record-on: var(--color-red-on);
+
+  /* ---------- typography (DESIGN.md §2.3); rem so text scales with the user's zoom ---------- */
+  --font-sans: "Geist Variable", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --text-display: 1.75rem;
+  --text-display--line-height: 2.125rem;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.02em;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.75rem;
+  --text-title--font-weight: 600;
+  --text-title--letter-spacing: -0.02em;
+  --text-heading: 1.125rem;
+  --text-heading--line-height: 1.5rem;
+  --text-heading--font-weight: 600;
+  --text-heading--letter-spacing: -0.015em;
+  --text-subheading: 1rem;
+  --text-subheading--line-height: 1.375rem;
+  --text-subheading--font-weight: 600;
+  --text-subheading--letter-spacing: -0.01em;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.25rem;
+  --text-body--letter-spacing: -0.005em;
+  --text-body-strong: 0.875rem;
+  --text-body-strong--line-height: 1.25rem;
+  --text-body-strong--font-weight: 500;
+  --text-body-strong--letter-spacing: -0.005em;
+  --text-reading: 0.9375rem;
+  --text-reading--line-height: 1.5rem;
+  --text-small: 0.75rem;
+  --text-small--line-height: 1rem;
+  --text-mono: 0.75rem;
+  --text-mono--line-height: 1rem;
+
+  /* ---------- radius (DESIGN.md §2.5) ---------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px; /* Radius/s */
+  --radius-lg: 10px; /* Radius/m */
+  --radius-xl: 12px; /* Radius/l */
+  --radius-2xl: 16px;
+
+  /* ---------- elevation (DESIGN.md §2.6) ---------- */
+  --shadow-xs: 0 1px 2px rgb(9 25 72 / 0.06); /* the kit's "Shadow" */
+  --shadow-sm: 0 2px 6px rgb(9 25 72 / 0.06), 0 1px 2px rgb(9 25 72 / 0.04);
+  --shadow-md: 0 8px 24px rgb(9 25 72 / 0.1), 0 2px 6px rgb(9 25 72 / 0.06);
+  --shadow-lg: 0 24px 64px rgb(9 25 72 / 0.18);
+  --shadow-focus: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-focus);
+
+  /* ---------- motion easing (DESIGN.md §2.9); durations are --dur-* below ---------- */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---------- breakpoints (DESIGN.md §2.8): window widths, written compact-first ---------- */
+  --breakpoint-regular: 1100px;
+  --breakpoint-wide: 1440px;
+}
+
+/* tokens that aren't Tailwind utilities; use them as z-(--z-dialog), w-(--sidebar-w), duration-fast (theme.css) */
+:root {
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
+
+  --control-sm: 32px;
+  --control-md: 36px;
+  --control-lg: 40px;
+  --sidebar-w: 248px;
+  --sidebar-rail-w: 64px;
+  --topbar-h: 56px;
+  --content-max: 1440px;
+  --reading-max: 760px;
+
+  --z-sticky: 10;
+  --z-sidebar: 20;
+  --z-dropdown: 30;
+  --z-banner: 40;
+  --z-overlay: 50;
+  --z-dialog: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #0e0f0f;
+    --color-surface: #161717;
+    --color-raised: #1d1e1f;
+    --color-hover: #222324;
+    --color-selected: #26282a;
+    --color-inset: #121313;
+    --color-disabled: #232425;
+    --color-overlay: rgb(0 0 0 / 0.6);
+
+    --color-line: #2b2c2e;
+    --color-line-strong: #3a3c3e;
+    --color-line-hover: #6b6e72;
+
+    --color-fg: #ededed;
+    --color-fg-secondary: #a3a3a3;
+    --color-fg-tertiary: #8a8a8a;
+    --color-fg-disabled: #5f6163;
+    --color-fg-inverse: #04140d;
+    --color-icon: #c9c9c9;
+
+    --color-accent: #33b17e; /* Primary/400, with dark text */
+    --color-accent-hover: #66c49e; /* Primary/300 */
+    --color-accent-soft: rgb(51 177 126 / 0.14);
+    --color-accent-fg: #4fc492;
+    --color-brand: #33b17e;
+    --color-focus: #33b17e;
+
+    /* hues: the kit's badge colour at 14% (soft) and 35% (line) over the surface, light text tones */
+    --color-red-soft: rgb(198 52 53 / 0.14);
+    --color-red-line: rgb(198 52 53 / 0.35);
+    --color-red-fg: #f08b8b;
+
+    --color-green-soft: rgb(70 169 131 / 0.14);
+    --color-green-line: rgb(70 169 131 / 0.35);
+    --color-green-fg: #5fd3a2;
+    --color-green-solid: #33b17e;
+    --color-green-on: #04140d;
+
+    --color-yellow-soft: rgb(255 184 68 / 0.14);
+    --color-yellow-line: rgb(255 184 68 / 0.35);
+    --color-yellow-fg: #ffc966;
+
+    --color-blue-soft: rgb(20 139 231 / 0.14);
+    --color-blue-line: rgb(20 139 231 / 0.35);
+    --color-blue-fg: #79b8ff;
+
+    --color-purple-soft: rgb(164 37 243 / 0.14);
+    --color-purple-line: rgb(164 37 243 / 0.35);
+    --color-purple-fg: #c792f5;
+
+    --color-pink-soft: rgb(255 79 252 / 0.14);
+    --color-pink-line: rgb(255 79 252 / 0.35);
+    --color-pink-fg: #ff8bfd;
+
+    --color-orange-soft: rgb(245 124 35 / 0.14);
+    --color-orange-line: rgb(245 124 35 / 0.35);
+    --color-orange-fg: #f7a065;
+
+    --color-teal-soft: rgb(61 202 232 / 0.14);
+    --color-teal-line: rgb(61 202 232 / 0.35);
+    --color-teal-fg: #6fdaf0;
+
+    --color-neutral-soft: #26282a;
+    --color-neutral-line: #3a3c3e;
+    --color-neutral-fg: #c9c9c9;
+    --color-neutral-solid: #ededed;
+    --color-neutral-on: #111111;
+
+    /* in the dark, surface colour and a hairline carry elevation better than shadow */
+    --shadow-xs: none;
+    --shadow-sm: 0 0 0 1px #2b2c2e;
+    --shadow-md: 0 8px 24px rgb(0 0 0 / 0.5), 0 0 0 1px #2b2c2e;
+    --shadow-lg: 0 24px 64px rgb(0 0 0 / 0.6), 0 0 0 1px #2b2c2e;
+  }
+}

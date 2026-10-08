@@ -572,6 +572,12 @@ export function deleteSegments(mid: string, sources: Segment['source'][]): void 
   const stmt = db.prepare('DELETE FROM segments WHERE meeting_id = ? AND source = ?')
   for (const s of sources) stmt.run(mid, s)
 }
+export function deleteSegmentsById(mid: string, ids: string[]): void {
+  const stmt = db.prepare('DELETE FROM segments WHERE meeting_id = ? AND id = ?')
+  tx(() => {
+    for (const id of ids) stmt.run(mid, id)
+  })
+}
 /** Atomically replaces the segments of the given sources; on failure the old ones stay. */
 export function replaceSegments(mid: string, sources: Segment['source'][], segs: Omit<Segment, 'id' | 'meetingId' | 'idx'>[]): Segment[] {
   return tx(() => {

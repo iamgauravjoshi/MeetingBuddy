@@ -91,6 +91,30 @@ describe('live chunks', () => {
     await settled(m.id)
     expect(texts(m.id)).not.toContain('late words from the chunk')
   })
+
+  describe('echo of the speakers in the mic', () => {
+    const remote = 'the authentication process is acting up for users'
+    const mine = 'I never said any of that myself'
+
+    it('drops mic lines that echo system speech already in the transcript', async () => {
+      const m = api.startRecording(projectId, 'T', '')
+      transcribe.mockResolvedValueOnce([said(remote, 'system', 10)]).mockResolvedValueOnce([said(remote, 'mic', 10), said(mine, 'mic', 12)])
+      await api.recordingChunk(m.id, 'system', 0, bytes('s'))
+      const added = await api.recordingChunk(m.id, 'mic', 0, bytes('m'))
+      expect(added.map((s) => s.text)).toEqual([mine])
+      expect(texts(m.id)).toEqual([remote, mine])
+    })
+
+    it('removes an echoed mic line when the system chunk arrives later', async () => {
+      const m = api.startRecording(projectId, 'T', '')
+      transcribe.mockResolvedValueOnce([said(remote, 'mic', 10), said(mine, 'mic', 12)]).mockResolvedValueOnce([said(remote, 'system', 10)])
+      await api.recordingChunk(m.id, 'mic', 0, bytes('m'))
+      sent.length = 0
+      await api.recordingChunk(m.id, 'system', 0, bytes('s'))
+      expect(texts(m.id)).toEqual([remote, mine])
+      expect(sent).toContain('meeting:changed')
+    })
+  })
 })
 
 describe('finishing a meeting', () => {

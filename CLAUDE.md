@@ -67,7 +67,7 @@ To run the app against throwaway data instead of `%APPDATA%\MeetingBuddy`, pass 
    - The main window uses `backgroundThrottling: false` so recording continues while the window is hidden in the tray.
 2. **Each stream gets two MediaRecorders:**
    - A continuous one. Every 5 s its data is appended to `<source>.webm` on disk via `appendRecordingChunk`, through a per-stream promise queue that keeps writes in order. `stop()` waits for that queue, so a crash loses only the last few seconds.
-   - A rolling chunk recorder, every `chunkSeconds`. Its chunks go through `recordingChunk` for the live transcript preview. `recordingChunk` drops any result that arrives after the meeting has left `recording`.
+   - A rolling chunk recorder, every `chunkSeconds`. Its chunks go through `recordingChunk` for the live transcript preview. `recordingChunk` drops any result that arrives after the meeting has left `recording`. It also removes mic echo of the speakers with `isEcho` (`stt.ts`), whichever stream's chunk arrives first: a mic chunk is filtered against the stored system segments, and a system chunk deletes stored mic echoes, then broadcasts `meeting:changed`.
 3. **On stop**, `api.stopRecording` calls `finishMeeting`, which:
    - re-transcribes the **full** files with `Promise.allSettled`. A stream that fails, or returns nothing, keeps its live-preview segments.
    - runs `mergeStreams` to drop mic echo of speaker audio,

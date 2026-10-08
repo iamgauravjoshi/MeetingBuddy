@@ -137,19 +137,22 @@ const words = (t: string): string[] =>
     .split(/\s+/)
     .filter(Boolean)
 
+type Timed = Pick<RawSegment, 'tStart' | 'tEnd' | 'text'>
+
 /**
  * Without headphones the mic also hears the speakers, so remote speech shows up twice.
- * Drop mic segments that mostly repeat an overlapping system segment.
+ * A mic segment is an echo when most of its words were said on the system stream around the same time.
+ * The words of all overlapping system segments count together, because one mic segment can span several.
  */
+export function isEcho(mic: Timed, system: Timed[]): boolean {
+  const mw = words(mic.text)
+  if (mw.length === 0) return false
+  const sw = new Set(system.filter((sy) => sy.tEnd + 2 >= mic.tStart && sy.tStart - 2 <= mic.tEnd).flatMap((sy) => words(sy.text)))
+  return mw.filter((w) => sw.has(w)).length / mw.length > 0.6
+}
+
+/** Drops mic segments that are empty or echo the system stream, then interleaves both streams by time. */
 export function mergeStreams(mic: RawSegment[], system: RawSegment[]): RawSegment[] {
-  const keptMic = mic.filter((m) => {
-    const mw = words(m.text)
-    if (mw.length === 0) return false
-    return !system.some((sy) => {
-      if (sy.tEnd + 2 < m.tStart || sy.tStart - 2 > m.tEnd) return false
-      const sw = new Set(words(sy.text))
-      return mw.filter((w) => sw.has(w)).length / mw.length > 0.6
-    })
-  })
+  const keptMic = mic.filter((m) => words(m.text).length > 0 && !isEcho(m, system))
   return [...keptMic, ...system].sort((a, b) => a.tStart - b.tStart)
 }

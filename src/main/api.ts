@@ -5,7 +5,7 @@ import type { Item, LlmProvider, MainEvents, Proposal, Settings, Stakeholder, St
 import * as db from './db'
 import { analyzeMeeting, applyApproved } from './analysis'
 import { getSettings, saveSettings, setSecret } from './settings'
-import { checkUploadSize, CHUNK_TIMEOUT_MS, FILE_TIMEOUT_MS, mergeStreams, transcribe } from './stt'
+import { checkUploadSize, CHUNK_TIMEOUT_MS, FILE_TIMEOUT_MS, isEcho, mergeStreams, transcribe } from './stt'
 import { parseTranscript } from './transcriptParser'
 import { getModel } from './llm'
 import { deleteMeetingAudio, meetingAudioDir, sweepOrphanedAudio } from './audio'
@@ -227,11 +227,22 @@ export const api = {
   recordingChunk: async (meetingId: string, source: Stream, offsetSec: number, data: Uint8Array) => {
     const s = getSettings()
     if (s.sttProvider === 'none') return []
-    const segs = await transcribe(s, Buffer.from(data), 'audio/webm', source, offsetSec, CHUNK_TIMEOUT_MS)
+    const transcribed = await transcribe(s, Buffer.from(data), 'audio/webm', source, offsetSec, CHUNK_TIMEOUT_MS)
     // once recording stops, the full-file pass owns the transcript; a chunk that finishes later is dropped
-    if (segs.length === 0 || db.getMeeting(meetingId)?.status !== 'recording') return []
-    const added = db.addSegments(meetingId, segs)
-    broadcast('transcript:appended', meetingId, added)
+    if (transcribed.length === 0 || db.getMeeting(meetingId)?.status !== 'recording') return []
+    // the mic hears the speakers too: drop mic lines that echo system speech, whichever stream's chunk arrives first
+    const stored = db.listSegments(meetingId)
+    const storedSystem = stored.filter((x) => x.source === 'system')
+    const segs = source === 'mic' ? transcribed.filter((g) => !isEcho(g, storedSystem)) : transcribed
+    const added = segs.length ? db.addSegments(meetingId, segs) : []
+    if (added.length) broadcast('transcript:appended', meetingId, added)
+    if (source === 'system') {
+      const echoes = stored.filter((x) => x.source === 'mic' && isEcho(x, added)).map((x) => x.id)
+      if (echoes.length) {
+        db.deleteSegmentsById(meetingId, echoes)
+        broadcast('meeting:changed', meetingId)
+      }
+    }
     return added
   },
   /** Appends a few seconds of recorded audio to the stream's file, so a crash loses at most that much. */

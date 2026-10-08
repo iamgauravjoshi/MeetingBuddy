@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('../src/main/settings', () => ({}))
 import { parseTranscript } from '../src/main/transcriptParser'
-import { mergeStreams } from '../src/main/stt'
+import { isEcho, mergeStreams } from '../src/main/stt'
 
 describe('parseTranscript', () => {
   it('parses plain "Name: text" lines and merges continuations', () => {
@@ -42,6 +42,41 @@ describe('mergeStreams', () => {
     const sys = [{ speaker: 'Speaker 1', tStart: 10.5, tEnd: 13, text: 'Launch moves to November twenty.', source: 'system' as const }]
     const out = mergeStreams(mic, sys)
     expect(out.map((s) => s.speaker)).toEqual(['Me', 'Speaker 1'])
+  })
+  it('drops a mic echo that spans several system segments', () => {
+    // from a real recording: one mic line covered two system utterances, neither of which matched it on its own
+    const mic = [
+      {
+        speaker: 'Me',
+        tStart: 50.3,
+        tEnd: 55.6,
+        text: "as well. One other thing I wanted to talk about, there's a student I've noticed here, John Smith.",
+        source: 'mic' as const
+      }
+    ]
+    const sys = [
+      {
+        speaker: 'Speaker 1',
+        tStart: 50.3,
+        tEnd: 53,
+        text: 'as well. So one other thing I wanted to talk about,',
+        source: 'system' as const
+      },
+      {
+        speaker: 'Speaker 1',
+        tStart: 53.2,
+        tEnd: 55.6,
+        text: "there's a student I've noticed here, John Smith.",
+        source: 'system' as const
+      }
+    ]
+    expect(isEcho(mic[0], sys)).toBe(true)
+    expect(mergeStreams(mic, sys).map((s) => s.source)).toEqual(['system', 'system'])
+  })
+  it('keeps local speech that overlaps remote speech in time', () => {
+    const me = { tStart: 51, tEnd: 54, text: 'Sorry, can we come back to the budget first?' }
+    const sys = [{ tStart: 50.3, tEnd: 55.6, text: "there's a student I've noticed here, John Smith." }]
+    expect(isEcho(me, sys)).toBe(false)
   })
 })
 

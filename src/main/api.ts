@@ -232,16 +232,8 @@ export const api = {
     if (transcribed.length === 0 || db.getMeeting(meetingId)?.status !== 'recording') return []
     // the mic hears the speakers too: drop mic lines that echo system speech, whichever stream's chunk arrives first
     const stored = db.listSegments(meetingId)
-    const segs =
-      source === 'mic'
-        ? transcribed.filter(
-            (g) =>
-              !isEcho(
-                g,
-                stored.filter((x) => x.source === 'system')
-              )
-          )
-        : transcribed
+    const storedSystem = stored.filter((x) => x.source === 'system')
+    const segs = source === 'mic' ? transcribed.filter((g) => !isEcho(g, storedSystem)) : transcribed
     const added = segs.length ? db.addSegments(meetingId, segs) : []
     if (added.length) broadcast('transcript:appended', meetingId, added)
     if (source === 'system') {

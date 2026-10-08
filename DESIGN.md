@@ -544,7 +544,7 @@ It replaces `ErrorBox` and `.error`. Uses: the meeting error with "Transcribe re
 `{ icon, title, body, action?, secondaryAction? }`. Centred, with an icon in a soft circle, `--text-subheading` title and body max 420 px. Copy always says what to do next.
 
 #### Skeleton
-`<Skeleton width height radius>` plus presets `Skeleton.Text lines`, `Skeleton.Card` and `Skeleton.Row`. It has a shimmer (§7). This replaces `return null` while loading.
+`<Skeleton className>` sized with utilities, plus presets `SkeletonText lines`, `SkeletonCard` and `SkeletonRow`. It has a shimmer (§7). This replaces `return null` while loading.
 
 #### Spinner
 16/20 px ring, `currentColor`, `role="status"` with `aria-label`.
@@ -647,7 +647,7 @@ Keyboard shortcut chip. It renders `CommandOrControl` as `Ctrl` (this logic exis
 
 ### 4.4 Hooks and lib
 
-- `hooks/`: `useAction` (unchanged semantics), `useEvent`, `useTick`, `useTheme`, `useMediaQuery`, `useConfirm`, `useToast`, `useHotkey` (in-window shortcuts, §8.2).
+- `hooks/`: `useAction` (unchanged semantics), `useEvent`, `useTick`, `useMediaQuery`, `useHotkey` (in-window shortcuts, §8.2), and `useTheme` with the Settings rebuild (Step 3). `useConfirm` and `useToast` live with their providers in `components/ui`.
 - `lib/`: `clickable` (kept for the rare non-button case), `format` (re-exports `@shared/format`, `fmtDate`), `speakerColor`, `labels` (the `OP_*` and `STATUS_*` maps now duplicated across files, collected in one place).
 
 ---
@@ -669,29 +669,19 @@ src/renderer/src/
 │   └── base.css                 # @layer base: body, headings, focus ring, scrollbars, reduced-motion, forced-colors
 │
 ├── components/
-│   ├── ui/                      # primitives: no api calls, no domain types
-│   │   ├── Button/              # Button.tsx, button.variants.ts (cva), index.ts
-│   │   ├── IconButton/
-│   │   ├── SplitButton/
-│   │   ├── Icon/
-│   │   ├── Badge/
-│   │   ├── Input/               # Input, Textarea, Select, SecretInput
-│   │   ├── Field/
-│   │   ├── Checkbox/  Switch/  RadioCardGroup/
-│   │   ├── Tabs/                # Tabs, SegmentedControl
-│   │   ├── Card/
-│   │   ├── Dialog/              # Dialog, ConfirmDialog + useConfirm
-│   │   ├── Menu/
-│   │   ├── Tooltip/
-│   │   ├── Toast/               # ToastRegion + useToast
-│   │   ├── Banner/
-│   │   ├── EmptyState/
-│   │   ├── Skeleton/  Spinner/  ProgressBar/
-│   │   ├── Avatar/  Kbd/  Timestamp/  Stat/  Divider/  VisuallyHidden/
+│   ├── ui/                      # primitives: no api calls, no domain types; one file each, cva variants inline
+│   │   ├── Button.tsx  IconButton.tsx  SplitButton.tsx  Icon.tsx  Spinner.tsx
+│   │   ├── Badge.tsx  Avatar.tsx  Kbd.tsx  Timestamp.tsx  Stat.tsx  Divider.tsx  VisuallyHidden.tsx
+│   │   ├── Input.tsx            # Input, SecretInput, Textarea, Select
+│   │   ├── Field.tsx  Checkbox.tsx  Switch.tsx  RadioCardGroup.tsx
+│   │   ├── Tabs.tsx             # Tabs, SegmentedControl
+│   │   ├── Card.tsx  Banner.tsx  EmptyState.tsx  Skeleton.tsx  ProgressBar.tsx
+│   │   ├── Dialog.tsx  ConfirmDialog.tsx (ConfirmProvider + useConfirm)
+│   │   ├── Menu.tsx  Tooltip.tsx  Toast.tsx (ToastProvider + useToast)
 │   │   └── index.ts             # barrel
 │   ├── domain/                  # thin wrappers mapping domain values → primitives
-│   │   ├── ItemTypeBadge.tsx  OpBadge.tsx  MeetingStatusBadge.tsx
-│   │   ├── ImpactBadge.tsx  ItemStatusBadge.tsx  SpeakerAvatar.tsx
+│   │   ├── badges.tsx           # ItemTypeBadge, OpBadge, MeetingStatusBadge, ItemStatusBadge, ImpactBadge
+│   │   ├── SpeakerAvatar.tsx
 │   │   └── index.ts
 │   └── layout/
 │       ├── AppShell/  Sidebar/  TopBar/  Breadcrumbs/
@@ -709,8 +699,8 @@ src/renderer/src/
 │   ├── MeetingPage.tsx
 │   └── SettingsPage.tsx
 │
-├── hooks/                       # useAction, useEvent, useTick, useTheme, useMediaQuery, useHotkey
-└── lib/                         # cn (clsx + tailwind-merge), clickable, format, speakerColor, labels (+ icons)
+├── hooks/                       # useAction, useEvent, useTick, useMediaQuery, useHotkey
+└── lib/                         # cn (clsx + tailwind-merge), clickable, format, hues (toneVars), roving (arrow keys), speakerColor, labels (+ icons)
 ```
 
 **Dependency rules** (written down now; they could be enforced later with Biome `noRestrictedImports`):

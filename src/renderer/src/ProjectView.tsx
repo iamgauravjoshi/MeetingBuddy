@@ -293,7 +293,7 @@ function ItemModal(props: { item: Partial<Item>; onClose: () => void; onSaved: (
         )}
       </div>
       <Field label="Title">
-        <input className="input" value={f.title} onChange={set('title')} autoFocus />
+        <input className="input" value={f.title} onChange={set('title')} data-autofocus />
       </Field>
       <Field label="Details">
         <textarea className="input" rows={4} value={f.body} onChange={set('body')} />

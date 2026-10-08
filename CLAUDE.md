@@ -169,9 +169,12 @@ To run the app against throwaway data instead of `%APPDATA%\MeetingBuddy`, pass 
 - **The UI is being redesigned in steps; `DESIGN.md` is the spec** (tokens, components, folder structure, migration order).
   - Styling is Tailwind CSS v4 (`@tailwindcss/vite`) on the tokens in `src/renderer/src/styles/tokens.css`. Tailwind's default colours, fonts and breakpoints are cleared (`styles/theme.css`), so only semantic utilities like `bg-surface` and `text-fg-secondary` exist.
   - The old `styles.css` is unlayered, so it overrides Tailwind until each screen is rebuilt; it is deleted at the end.
+  - Primitives are in `components/ui` (import from its `index.ts`), domain badges in `components/domain`, hooks in `hooks/`, helpers in `lib/`. `ui.tsx` only re-exports them for the old screens; its `Modal` is the new `Dialog`.
+  - `Dialog` uses the native `<dialog>` with `showModal()`. React's `autoFocus` runs before the dialog opens, so mark the field to focus with `data-autofocus` instead.
+  - jsdom has no `<dialog>` or `matchMedia`; `test/renderer/setup.ts` fills them in. Fire a `cancel` event on the dialog to simulate Escape.
   - `test/renderer/contrast.test.ts` checks the tokens against WCAG AA in both themes. Change a colour, run it.
 
-- **Every user action that calls the api goes through `useAction()`** (in `ui.tsx`):
+- **Every user action that calls the api goes through `useAction()`** (`hooks/useAction.ts`):
   - It shows the error instead of losing it.
   - Its `busy` flag disables the button, and a second trigger while it runs is ignored, so actions can't double-submit.
   - Do success-only follow-up, such as closing a dialog, inside the action. A dialog then stays open, with its input, when the save fails.

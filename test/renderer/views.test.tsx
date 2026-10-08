@@ -9,7 +9,7 @@ import { fakeMb, ITEM, MEETING, PROJECT, REPORT, SEGMENT, SETTINGS } from './fak
 const type = (el: HTMLElement, value: string): void => {
   fireEvent.change(el, { target: { value } })
 }
-const modal = (): HTMLElement => document.querySelector('.modal') as HTMLElement
+const modal = (): HTMLElement => screen.getByRole('dialog')
 const fail = (message: string) => async () => Promise.reject(new Error(message))
 
 beforeEach(() => {

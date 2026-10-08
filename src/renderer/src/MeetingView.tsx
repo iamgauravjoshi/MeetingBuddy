@@ -603,7 +603,7 @@ function RenameModal(props: { title: string; onClose: () => void; onSave: (t: st
         </>
       }
     >
-      <input className="input" value={t} onChange={(e) => setT(e.target.value)} autoFocus />
+      <input className="input" value={t} onChange={(e) => setT(e.target.value)} data-autofocus />
       <ErrorBox error={error} />
     </Modal>
   )

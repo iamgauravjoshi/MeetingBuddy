@@ -343,7 +343,7 @@ function StartRecordingModal(props: {
         </select>
       </Field>
       <Field label="Meeting title">
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} data-autofocus />
       </Field>
       <p className="muted small">
         MeetingBuddy records your microphone and your computer's audio output (the other participants), with no bot joining the call. Let
@@ -378,7 +378,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       }
     >
       <Field label="Name">
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} data-autofocus />
       </Field>
       <Field label="Description, goals and context">
         <textarea

@@ -1,0 +1,49 @@
+/* Element defaults (DESIGN.md §8). In the base layer, so any component utility overrides them. */
+@layer base {
+  :root {
+    /* native scrollbars, checkboxes and date pickers follow the theme too */
+    color-scheme: light dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-body text-fg antialiased;
+  }
+
+  /* one focus ring everywhere, keyboard focus only (§8.3) */
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+  }
+
+  /* Windows High Contrast: drop custom colours for the system's, and keep focus visible */
+  @media (forced-colors: active) {
+    :focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: 2px;
+    }
+  }
+
+  /* nothing moves under reduced motion (§7), except status signals marked data-essential-motion (the recording dot) */
+  @media (prefers-reduced-motion: reduce) {
+    :not([data-essential-motion]),
+    ::before,
+    ::after {
+      /* biome-ignore-start lint/complexity/noImportantStyles: must override every component's own transition and animation */
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+      /* biome-ignore-end lint/complexity/noImportantStyles: see above */
+    }
+  }
+}

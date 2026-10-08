@@ -180,7 +180,7 @@ export function App() {
       <main className="main">
         {rec && (
           <div className="recbar">
-            <span className="recdot" />
+            <span className="recdot" data-essential-motion />
             <b>Recording</b>
             <span className="muted">{rec.title}</span>
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtTime(rec.recorder.elapsed())}</span>

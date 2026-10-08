@@ -19,8 +19,8 @@
       "arrowParentheses": "always"
     }
   },
-  // styles.css is hand-compacted one rule per line on purpose
-  "css": { "formatter": { "enabled": false } },
+  // Tailwind v4 directives (@theme, @utility, @apply) are CSS syntax Biome only parses when told to
+  "css": { "parser": { "tailwindDirectives": true } },
   "linter": {
     "enabled": true,
     "rules": {
@@ -32,10 +32,17 @@
         "noAutofocus": "off"
       },
       // `!` is used deliberately where strict TypeScript can't see an invariant
-      "style": { "noNonNullAssertion": "off" }
+      "style": { "noNonNullAssertion": "off" },
+      // one Tailwind class order everywhere keeps class lists scannable and diffs small (DESIGN.md §5.1)
+      "nursery": { "useSortedClasses": { "level": "error", "fix": "safe", "options": { "functions": ["cn", "cva"] } } }
     }
   },
   "overrides": [
+    {
+      // the pre-redesign stylesheet is hand-compacted one rule per line on purpose; it is deleted at the end of the redesign
+      "includes": ["src/renderer/src/styles.css"],
+      "formatter": { "enabled": false }
+    },
     {
       // test doubles are loosely typed on purpose
       "includes": ["test/**"],

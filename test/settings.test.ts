@@ -8,8 +8,10 @@ const userData = vi.hoisted(() => {
   const { join } = require('node:path') as typeof import('node:path')
   return mkdtempSync(join(tmpdir(), 'mb-settings-'))
 })
+const nativeTheme = vi.hoisted(() => ({ themeSource: 'system' }))
 vi.mock('electron', () => ({
   app: { getPath: () => userData },
+  nativeTheme,
   // stand-in for DPAPI: reversible, but not plain text
   safeStorage: {
     isEncryptionAvailable: () => true,
@@ -18,12 +20,13 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { getSecret, getSettings, saveSettings, setSecret } from '../src/main/settings'
+import { applyTheme, getSecret, getSettings, saveSettings, setSecret } from '../src/main/settings'
 
 const settingsFile = join(userData, 'settings.json')
 
 beforeEach(() => {
   for (const f of readdirSync(userData)) rmSync(join(userData, f), { force: true })
+  nativeTheme.themeSource = 'system'
 })
 afterAll(() => rmSync(userData, { recursive: true, force: true }))
 
@@ -44,6 +47,28 @@ describe('settings', () => {
     saveSettings({ selfName: 'Gaurav', chunkSeconds: 0 })
     expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toMatchObject({ selfName: 'Gaurav', chunkSeconds: 0 })
     expect(readdirSync(userData)).toEqual(['settings.json'])
+  })
+
+  it('defaults the theme to system and drops an unknown stored theme', () => {
+    expect(getSettings().theme).toBe('system')
+    writeFileSync(settingsFile, JSON.stringify({ theme: 'sepia' }))
+    expect(getSettings().theme).toBe('system')
+    writeFileSync(settingsFile, JSON.stringify({ theme: 'dark' }))
+    expect(getSettings().theme).toBe('dark')
+  })
+
+  it('applies a saved theme to the native theme straight away, and the stored one on startup', () => {
+    saveSettings({ theme: 'light' })
+    expect(nativeTheme.themeSource).toBe('light')
+    nativeTheme.themeSource = 'system'
+    applyTheme()
+    expect(nativeTheme.themeSource).toBe('light')
+  })
+
+  it('leaves the native theme alone when other settings are saved', () => {
+    nativeTheme.themeSource = 'dark'
+    saveSettings({ selfName: 'Gaurav' })
+    expect(nativeTheme.themeSource).toBe('dark')
   })
 
   it('stores secrets encrypted and reports which ones exist', () => {
